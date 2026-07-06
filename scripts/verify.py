@@ -86,12 +86,26 @@ def _load_pw(pw_csv):
     return raw if raw.size and raw.shape[1] == 2 else np.empty((0, 2))
 
 
+def _render(overlay, binodal, pw, rel):
+    branches = [{"points": pw, "state": "pw", "branch_id": 3}] if len(pw) else None
+    P.plot_phase_map(
+        overlay, binodal, pw_branches=branches,
+        title=f"Verify {rel[0]} | {rel[1]} | {rel[2]}",
+        params_text="ours (DE solver) — compare result/.../overlay_omega1_omega2.png",
+    )
+
+
 def verify_case(rel, chi, surf, skip_existing=False):
     out_dir = cases.verify_dir(rel, ROOT)
     overlay = os.path.join(out_dir, "overlay.png")
     pw_csv = os.path.join(out_dir, "pw_line.csv")
-    if skip_existing and os.path.exists(overlay) and os.path.exists(pw_csv):
-        return _row_from_pw(rel, _load_pw(pw_csv))
+    # Resume keys on pw_line.csv (the expensive artifact). If only the plot is
+    # missing (e.g. a prior render crash), redraw it cheaply without recomputing.
+    if skip_existing and os.path.exists(pw_csv):
+        pw = _load_pw(pw_csv)
+        if not os.path.exists(overlay):
+            _render(overlay, B.binodal_from_hull(chi), pw, rel)
+        return _row_from_pw(rel, pw)
 
     os.makedirs(out_dir, exist_ok=True)
     binodal = B.binodal_from_hull(chi)
@@ -99,12 +113,7 @@ def verify_case(rel, chi, surf, skip_existing=False):
 
     np.savetxt(pw_csv, pw if len(pw) else np.empty((0, 2)),
                delimiter=",", header="phi1_inf,phi2_inf", comments="")
-    branches = [{"points": pw, "state": "pw", "branch_id": 3}] if len(pw) else None
-    P.plot_phase_map(
-        overlay, binodal, pw_branches=branches,
-        title=f"Verify {rel[0]} | {rel[1]} | {rel[2]}",
-        params_text="ours (DE solver) — compare result/.../overlay_omega1_omega2.png",
-    )
+    _render(overlay, binodal, pw, rel)
     return _row_from_pw(rel, pw)
 
 

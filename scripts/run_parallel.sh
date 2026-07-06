@@ -33,6 +33,13 @@ fi
 NLINES="$(printf '%s\n' "$WORK" | grep -c .)"
 
 echo "cases=$NLINES  cores=$CORES  python='$PY'"
+
+# Prewarm caches single-process before fanning out. 16 workers importing matplotlib
+# for the first time concurrently race on the font cache / .pyc build and crash with
+# "No module named matplotlib.backends.backend_agg". One warm-up import fixes that.
+echo "prewarming caches ..."
+$PY -c "import numpy, scipy.integrate, matplotlib.pyplot" >/dev/null 2>&1 || true
+
 start=$(date +%s)
 printf '%s\n' "$WORK" | xargs -P "$CORES" -L1 $PY scripts/verify.py --skip-existing --no-summary \
   || echo "warning: some cases exited non-zero"
