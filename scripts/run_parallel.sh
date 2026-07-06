@@ -13,6 +13,12 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# Pin each worker to a single BLAS/OpenMP thread. Without this, numpy/scipy spawn
+# one thread per core PER process, so P parallel workers oversubscribe the machine
+# (P*cores threads) and thrash. One thread each => P workers map cleanly onto P cores.
+export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+       NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+
 N="${1:-0}"
 CORES="${2:-$( (command -v nproc >/dev/null 2>&1 && nproc) || echo 4)}"
 PY="${PY:-conda run -n numenv python}"
