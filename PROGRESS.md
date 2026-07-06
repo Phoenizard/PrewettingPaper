@@ -4,16 +4,20 @@
 
 ## 当前状态
 
-- 阶段：验证 result/ 结果（同组成员的求解，做独立复核）
-- 代码：src/ 5 模块 + scripts/ 2 驱动，均可运行
+- 阶段：验证 result/ 结果（同组成员的求解，做独立复核）；服务器并行部署链路已打通，调试收尾中
+- 代码：src/ 5 模块 + scripts/ 3 驱动（含 run_parallel.sh），均可运行
+- GitHub：https://github.com/Phoenizard/PrewettingPaper （public）
+- 服务器：AutoDL，16 核 / 1TB 内存 / Ubuntu 20.04；代码在 /root/autodl-tmp/PrewettingPaper，numenv 已建
 - binodal 诊断：6 种拓扑 T-a..T-f 已出图（out/_binodal_check/）
-- 验证进度：1 / ~770 case
+- 验证进度：本地 1 / ~770；服务器 16-case 首测已算完 10 个 pw_line.csv（画图 bug 已修，待带修复重跑确认）
 
 ## 下一步
 
+- 下次：带修复重跑 16-case 首测（skip-existing 会复用已算的 10 个），确认全部出图 + SUMMARY，量并行加速比；通过后再逐 chi 目录扩规模。
 - TODO: 部署服务器无人值守跑全部 770 case（串行单核约 10-13 天，见下方成本估算）。
-  - 并行由启动脚本（.sh，如 GNU parallel / 作业分发）处理，不写进 Python 代码；case 之间相互独立。
-  - [done] verify.py 已加 --skip-existing：overlay.png + pw_line.csv 都在则跳过重算、从 csv 补 SUMMARY。
+  - 并行由启动脚本 scripts/run_parallel.sh 处理（xargs -P，不写进 Python 代码）；case 独立。
+  - [done] verify.py 已加 --skip-existing / --no-summary / --rebuild-summary（并行无竞态 + 断点续跑）。
+  - [done] 单 case 现实耗时：服务器单线程满速约 17-25 min/case（与本地估算同量级）。
   - 算法加速（可与并行叠乘）：find_states 沿 phi1 扫描改暖启动/延拓，减少 solve_bvp 重解。
 - 比对 out/verify/ 与 result/ 的 pre-wetting 转变线，记录一致/差异
 - TODO: 结果对比 UI（快速看每个 stage / 每种配置下 本地 vs result 的差异）。可行性见下。
@@ -46,6 +50,20 @@
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-07
+
+- 服务器并行部署。git init + 首次提交；用 gh 建 public 仓库 Phoenizard/PrewettingPaper 并推送。
+  result/（242MB PNG）不上传，改提交 result_cases.txt（770 行三元组清单）当服务器 case 来源。
+- 新增 scripts/run_parallel.sh（xargs -P 按 case 并行）；verify.py 加 --no-summary / --rebuild-summary。
+- 服务器：network_turbo 加速 clone，conda 建 numenv。跑 16-case 首测，调出两个 bug：
+  1. BLAS 超额订阅：每 worker 默认开 16 线程，16×16 抢 16 核，load~48、各 54% CPU。
+     修复：run_parallel.sh export *_NUM_THREADS=1（单线程），修后各 100% CPU、16 核干净铺满。
+  2. matplotlib 并发首次导入竞态：16 进程同时首次 import 崩 "No module named backend_agg"
+     （计算已成、pw_line.csv 已写，仅画图崩）。修复：并行前单进程预热缓存；verify.py 的
+     --skip-existing 改以 pw_line.csv 为准、缺图只重画，抢救已算的 10 个 case。
+- 经验记录：network_turbo 只对 github/hf 加速、会拖慢 conda/pip；tmux 保活；避免 pkill -f 自匹配。
+- 待办：带修复重跑 16-case 确认加速比（今日到此为止，未重跑）。
 
 ### 2026-07-06
 
