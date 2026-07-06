@@ -1,0 +1,13 @@
+# Reference sweep (242MB of PNGs) stays local; server uses result_cases.txt instead
+result/
+
+# Generated verification outputs / diagnostics
+out/
+
+# Python / OS cruft
+__pycache__/
+*.pyc
+.DS_Store
+
+# Session scratch
+scratchpad/
