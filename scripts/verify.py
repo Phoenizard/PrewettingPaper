@@ -85,21 +85,30 @@ def _adsorption(prof, res):
     return float(_trapz((prof.phi[0] - res[0]) + (prof.phi[1] - res[1]), prof.z))
 
 
+def _dense_fan(f_right, phi2):
+    """Multi-start wall targets across the phi1-rich flank (thin/middle/thick basins),
+    the 5-point fan validated in is_prewetting / pw_check_transition."""
+    fr = f_right(phi2)
+    return [(fr, phi2), (0.97 * fr, phi2), (0.9, phi2), (0.7, phi2), (0.5, phi2)]
+
+
 def _branch_scan(chi, surf, fixed, scan_vals, axis, mode, f_right, progress=None):
     """Build ONE surface branch along a reservoir scan, warm-started point to point.
 
     axis="phi1": fixed=phi2, scan_vals are phi1_inf (reservoir phi1 swept).
     axis="phi2": fixed=phi1, scan_vals are phi2_inf.
-    mode="thin"  scans scan_vals in the given (ascending) order; the cold seed is a small
-                 wall enrichment (near-reservoir) — the thin basin.
-    mode="thick" scans in REVERSE (descending); the cold seed is a phi1-rich wall plateau
-                 (dense flank) — the thick basin. Reverse + high-phi1 start keeps the thick
-                 attractor, exactly where independent multi-start loses it.
+    mode="thin"  scans scan_vals ascending; the branch is the THINNEST state (st[0]).
+    mode="thick" scans REVERSED (descending); the branch is the THICKEST state (st[-1]).
 
-    Each point warm-starts from the previous converged profile (solve_profile(warm=...));
-    a non-converged point is recorded as NaN and the previous warm seed is kept. Returns
-    (gamma[], cs[]) aligned to scan_vals ASCENDING (thick is reversed back before return),
-    NaN where the solve failed. Streams one line per scan point when progress is a tag."""
+    Seeding: with no warm profile yet (branch start, or after a gap) we cold-find ALL
+    surface states via find_states (the validated multi-start with the dense phi1-rich
+    fan) and pick the role state — st[0] for thin, st[-1] for thick. This robustly grabs
+    the thick basin even when a third (middle) state is present, which a hand-built decay
+    seed cannot (it collapses into the thin basin). Once seeded, each subsequent point
+    warm-starts from the previous converged profile (cheap, follows the branch). A point
+    where the role state is absent / fails to converge is recorded NaN; warm is reset so
+    the next point re-seeds via find_states. Returns (gamma[], cs[]) aligned to scan_vals
+    ASCENDING. Streams one line per scan point when progress is a tag."""
     order = list(range(len(scan_vals)))
     if mode == "thick":
         order = order[::-1]
@@ -109,23 +118,23 @@ def _branch_scan(chi, surf, fixed, scan_vals, axis, mode, f_right, progress=None
     for k in order:
         sv = float(scan_vals[k])
         res = (sv, fixed) if axis == "phi1" else (fixed, sv)
-        if warm is None:  # cold seed for this branch's basin
-            if mode == "thin":
-                seed = (min(0.98, res[0] + 0.02), res[1])
-                w = 2.0
-            else:  # thick: phi1-rich wall plateau from the dense flank
-                fr = f_right(res[1]) if axis == "phi1" else f_right(fixed)
-                seed = (max(res[0] + 0.05, min(0.95, fr)), res[1])
-                w = 4.0
-            p = E.solve_profile(chi, res, surf, KAPPA, seed=seed, w=w)
-        else:
+        p = None
+        via = "warm"
+        if warm is not None:
             p = E.solve_profile(chi, res, surf, KAPPA, warm=warm)
+        if p is None:  # (re)seed this branch via cold multi-start, pick the role state
+            via = "cold"
+            st = E.find_states(chi, res, surf, KAPPA, dense_seeds=_dense_fan(f_right, res[1]))
+            if st:
+                p = st[0] if mode == "thin" else st[-1]
         tag_hit = "None"
         if p is not None:
             gamma[k] = p.gamma
             cs[k] = _adsorption(p, res)
             warm = (p.sol_x, p.sol_y)
-            tag_hit = f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f}"
+            tag_hit = f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f} ({via})"
+        else:
+            warm = None  # branch broke here; next point cold-reseeds
         if progress:
             print(f"[{progress}]   scan-{axis} {mode} fixed={fixed:.4f} "
                   f"{'phi1' if axis=='phi1' else 'phi2'}={sv:.4f} -> {tag_hit}",
