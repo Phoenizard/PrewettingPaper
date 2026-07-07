@@ -67,7 +67,7 @@ def _laplacian_block(kappa, N, h):
 class FDSolver:
     """Fixed grid (L, N); build A and the constant wall-Jacobian once, reuse per solve."""
 
-    def __init__(self, chi, surf, kappa, L=15.0, N=1500):
+    def __init__(self, chi, surf, kappa, L=25.0, N=2500):
         self.chi = chi
         self.surf = surf
         self.kappa = kappa
