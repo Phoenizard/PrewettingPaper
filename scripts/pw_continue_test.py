@@ -73,7 +73,8 @@ def seed_scan(chi, surf, phi2, f_left, f_right):
     return None
 
 
-def continue_dir(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.003):
+def continue_dir(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.003,
+                 phi2_ceiling=0.15, max_steps=60):
     """March the PW line from `seed`=(phi2, phi1_star, thin_warm, thick_warm) in
     `direction` (+1 up / -1 down) until the branches merge or we leave the flank.
     Returns (points list [(phi1_star, phi2)], stop_reason, terminus_phi2)."""
@@ -81,32 +82,38 @@ def continue_dir(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.003
     out = []
     p1_prev, p1_prev2 = phi1_s, None
     phi2 = phi2_s
-    while True:
+    tag = "up" if direction > 0 else "down"
+    for _ in range(max_steps):
         phi2n = round(phi2 + direction * dphi2, 10)
         if phi2n <= phi2_floor:
             return out, "floor", phi2
-        if phi2n >= apex:
-            return out, "apex", phi2
+        if phi2n >= min(apex, phi2_ceiling):
+            return out, "ceiling", phi2
         guess = p1_prev if p1_prev2 is None else (2.0 * p1_prev - p1_prev2)
-        res = E.pw_point(chi, phi2n, surf, KAPPA, tw, kw, guess)
+        res = E.pw_point(chi, phi2n, surf, KAPPA, tw, kw, guess, max_it=20)
         if res is None:
+            print(f"  [{tag}] phi2={phi2n:.4f}  MERGE/terminus", flush=True)
             return out, "merge", phi2   # last surviving point was at phi2
         phi1_star, thin, thick = res
+        sep = abs(thin.phi[0][0] - thick.phi[0][0])
+        print(f"  [{tag}] phi2={phi2n:.4f}  phi1*={phi1_star:.4f}  sep={sep:.4f}",
+              flush=True)
         out.append((phi1_star, phi2n))
         tw = (thin.sol_x, thin.sol_y)
         kw = (thick.sol_x, thick.sol_y)
         p1_prev2, p1_prev = p1_prev, phi1_star
         phi2 = phi2n
+    return out, "maxsteps", phi2
 
 
 def main():
     chi, surf = cases.parse_case(*REL)
     bd = B.binodal_from_hull(chi)
     f_left, f_right, apex = branches(bd)
-    print(f"case {'/'.join(REL)}  apex_phi2={apex:.4f}")
+    print(f"case {'/'.join(REL)}  apex_phi2={apex:.4f}", flush=True)
 
-    # Seed over the middle band (also gives old-method points for cross-check).
-    band = np.arange(0.02, 0.10, 0.01)
+    # Seed over a small middle band (also gives old-method points for cross-check).
+    band = np.arange(0.03, 0.07, 0.01)
     old_pts, seeds = [], []
     for phi2 in band:
         r = seed_scan(chi, surf, float(phi2), f_left, f_right)
@@ -114,12 +121,14 @@ def main():
             phi1_star, tw, kw, sep = r
             old_pts.append((phi1_star, float(phi2)))
             seeds.append((float(phi2), phi1_star, tw, kw, sep))
-            print(f"  seed phi2={phi2:.3f}  phi1*={phi1_star:.4f}  sep={sep:.4f}")
+            print(f"  seed phi2={phi2:.3f}  phi1*={phi1_star:.4f}  sep={sep:.4f}",
+                  flush=True)
     if not seeds:
         print("no seed found -- aborting")
         return
     best = max(seeds, key=lambda s: s[4])
-    print(f"best seed: phi2={best[0]:.3f} phi1*={best[1]:.4f} sep={best[4]:.4f}")
+    print(f"best seed: phi2={best[0]:.3f} phi1*={best[1]:.4f} sep={best[4]:.4f}",
+          flush=True)
 
     seed = (best[0], best[1], best[2], best[3])
     down, rd, td = continue_dir(chi, surf, seed, apex, -1)
