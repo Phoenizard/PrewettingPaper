@@ -49,11 +49,26 @@ def main(argv):
     chi, surf = cases.parse_case(*rel)
     bd = B.binodal_from_hull(chi)
     f_left, f_right, apex = V._branches(bd)
-    phi2s = floats if floats else [0.05, 0.026, 0.023]
 
-    print(f"{'/'.join(rel[1:2])}  (exact multi-start states per reservoir)", flush=True)
-    for phi2_inf in phi2s:
-        phi1_inf = float(f_left(phi2_inf))
+    # Reservoirs to test: the continuation's OWN transition points (pw_line.csv), NOT the
+    # binodal left flank — the pre-wetting point sits inside the flank, and using f_left
+    # picks a phi1_inf where no surface states exist. Read (phi1_inf, phi2_inf) rows and
+    # test the ones nearest the requested phi2 values.
+    dbroot = os.environ.get("RESULTS_DB", os.path.join(ROOT, "database"))
+    pw_csv = os.path.join(dbroot, *rel, "pw_line.csv")
+    if not os.path.exists(pw_csv):
+        pw_csv = os.path.join(ROOT, "out", *rel, "pw_line.csv")
+    pw = np.loadtxt(pw_csv, delimiter=",", skiprows=1, ndmin=2)  # (n,2) phi1_inf,phi2_inf
+    want = floats if floats else [0.06, 0.05, 0.04, 0.03, 0.026]
+    # pick the pw-line row whose phi2_inf is closest to each requested value
+    reservoirs = []
+    for w in want:
+        k = int(np.argmin(np.abs(pw[:, 1] - w)))
+        reservoirs.append((float(pw[k, 0]), float(pw[k, 1])))
+
+    print(f"{'/'.join(rel[1:2])}  (exact multi-start states at pw-line transition points)",
+          flush=True)
+    for phi1_inf, phi2_inf in reservoirs:
         fr = f_right(phi2_inf)
         dense = [(fr, phi2_inf), (0.97 * fr, phi2_inf), (0.9, phi2_inf),
                  (0.7, phi2_inf), (0.5, phi2_inf)]
