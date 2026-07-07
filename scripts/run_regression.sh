@@ -17,7 +17,9 @@ cd "$(dirname "$0")/.."
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
        NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 
-CORES="${1:-$( (command -v nproc >/dev/null 2>&1 && nproc) || echo 4)}"
+# nproc honors OMP_NUM_THREADS (which we pin to 1 above), so use `nproc --all` to
+# get the real core count for the parallel fan-out.
+CORES="${1:-$( (command -v nproc >/dev/null 2>&1 && nproc --all) || echo 4)}"
 PY="${PY:-conda run -n numenv python}"
 TOL="${TOL:-1e-3}"
 LOGROOT="out/logs/regression"
