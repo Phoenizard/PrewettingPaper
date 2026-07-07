@@ -52,13 +52,29 @@ def _load_summary():
     return out
 
 
+def _link_reference():
+    """Symlink $RESULTS_DB/result -> repo result/ so the reference figures live
+    inside the gallery's own tree. Browsers (esp. Safari) block file:// images
+    outside the HTML's directory, so ours (under the DB) loaded but result/ (a
+    sibling of the DB) did not; routing it through this symlink fixes that."""
+    link = os.path.join(RESULTS_DB, "result")
+    repo_result = os.path.join(ROOT, "result")
+    if os.path.isdir(repo_result) and not os.path.lexists(link):
+        try:
+            os.symlink(repo_result, link)
+        except OSError:
+            pass
+
+
 def build():
+    _link_reference()
     summ = _load_summary()
     catalog = []
     for rel in sorted(_iter_db_cases()):
         _, surf = cases.parse_case(*rel)
         ours = os.path.join(VERIFY, *rel, "overlay.png")
-        theirs = os.path.abspath(cases.result_overlay(rel, root=ROOT))
+        # via the in-DB symlink so the URL stays inside the gallery tree
+        theirs = os.path.abspath(cases.result_overlay(rel, root=RESULTS_DB))
         meta = summ.get(rel, {})
         catalog.append({
             "chi": rel[0], "om": rel[1], "chibb": rel[2],
