@@ -17,3 +17,6 @@ scratchpad/
 
 # Local workflow memo (not shared/tracked)
 doc/note/Workflow.md
+
+# Local results database + generated gallery (machine-local; later on external HDD)
+database/
