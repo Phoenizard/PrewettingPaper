@@ -22,7 +22,8 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
        NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 
 N="${1:-0}"
-CORES="${2:-$( (command -v nproc >/dev/null 2>&1 && nproc) || echo 4)}"
+# nproc honors OMP_NUM_THREADS (pinned to 1 above), so use `nproc --all` for real cores.
+CORES="${2:-$( (command -v nproc >/dev/null 2>&1 && nproc --all) || echo 4)}"
 PY="${PY:-conda run -n numenv python}"
 MANIFEST="${MANIFEST:-result_cases.txt}"   # override to run a case subset (e.g. the 10 baselines)
 

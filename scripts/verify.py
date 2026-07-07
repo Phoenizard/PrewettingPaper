@@ -116,11 +116,15 @@ def _load_pw(pw_csv):
     return raw if raw.size and raw.shape[1] == 2 else np.empty((0, 2))
 
 
-def verify_case(rel, chi, surf, skip_existing=False):
+def _out_dir(rel):
     # VERIFY_OUT overrides the output root (e.g. out/verify_opt) so an optimized
     # run produces results side-by-side without clobbering the baseline out/verify.
-    out_base = os.environ.get("VERIFY_OUT")
-    out_dir = os.path.join(out_base, *rel) if out_base else cases.verify_dir(rel, ROOT)
+    base = os.environ.get("VERIFY_OUT")
+    return os.path.join(base, *rel) if base else cases.verify_dir(rel, ROOT)
+
+
+def verify_case(rel, chi, surf, skip_existing=False):
+    out_dir = _out_dir(rel)
     pw_csv = os.path.join(out_dir, "pw_line.csv")
     # Resume keys on pw_line.csv (the only, and expensive, artifact here).
     if skip_existing and os.path.exists(pw_csv):
@@ -204,7 +208,7 @@ def main(argv):
         if not no_summary:
             _write_summary([row])
         print(f"{'/'.join(rel)} -> {row[3]} pw points ({row[8]})")
-        print(f"wrote {cases.verify_dir(rel, ROOT)}/" + ("" if no_summary else "  and SUMMARY.csv"))
+        print(f"wrote {_out_dir(rel)}/" + ("" if no_summary else "  and SUMMARY.csv"))
 
 
 if __name__ == "__main__":
