@@ -8,8 +8,10 @@
 #
 # Each case runs as an independent single-case verify.py invocation with
 # --skip-existing (resume) and --no-summary (avoid concurrent SUMMARY writes).
-# SUMMARY.csv is rebuilt once at the end from all pw_line.csv outputs.
-# Parallelism lives here in the launch script, not in the Python code.
+# Compute writes DATA only (pw_line.csv) — no worker imports matplotlib, so
+# there is no font-cache race and no compute/plot contention. After compute,
+# SUMMARY.csv is rebuilt from all pw_line.csv, then figures are rendered once,
+# single-process, by scripts/plot.py. Parallelism lives here, not in Python.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -34,12 +36,6 @@ NLINES="$(printf '%s\n' "$WORK" | grep -c .)"
 
 echo "cases=$NLINES  cores=$CORES  python='$PY'"
 
-# Prewarm caches single-process before fanning out. 16 workers importing matplotlib
-# for the first time concurrently race on the font cache / .pyc build and crash with
-# "No module named matplotlib.backends.backend_agg". One warm-up import fixes that.
-echo "prewarming caches ..."
-$PY -c "import numpy, scipy.integrate, matplotlib.pyplot" >/dev/null 2>&1 || true
-
 start=$(date +%s)
 printf '%s\n' "$WORK" | xargs -P "$CORES" -L1 $PY scripts/verify.py --skip-existing --no-summary \
   || echo "warning: some cases exited non-zero"
@@ -48,4 +44,9 @@ elapsed=$(( $(date +%s) - start ))
 echo "rebuilding SUMMARY.csv ..."
 $PY scripts/verify.py --rebuild-summary
 
-echo "done: $NLINES cases in ${elapsed}s on $CORES cores (~$(awk "BEGIN{printf \"%.1f\", $elapsed/$NLINES}")s/case wall)"
+# Render figures once, single-process, from the CSVs. Decoupled from compute:
+# if this step fails the data is already safe, and figures can be redrawn later.
+echo "rendering figures ..."
+$PY scripts/plot.py
+
+echo "done: $NLINES cases in ${elapsed}s on $CORES cores (~$(awk "BEGIN{printf \"%.1f\", $elapsed/$NLINES}")s/case wall) [compute]"

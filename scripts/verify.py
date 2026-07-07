@@ -1,8 +1,12 @@
 #!/usr/bin/env python
-"""Verify result/ pre-wetting cases with our equilibrium-DE solver.
+"""Verify result/ pre-wetting cases with our equilibrium-DE solver (compute only).
+
+Compute and plotting are decoupled: this script produces DATA only, never a
+figure — so parallel workers never import matplotlib (no font-cache race) and
+compute never contends with rendering. Turn the data into figures separately
+with scripts/plot.py.
 
 Output mirrors result/ 1:1 under out/verify/<chi_dir>/<om_dir>/<chibb_dir>/:
-  overlay.png   binodal + our pre-wetting line
   pw_line.csv   computed (phi1_inf, phi2_inf) transition points
 Top-level out/verify/SUMMARY.csv records every case run.
 
@@ -11,7 +15,7 @@ Usage:
   conda run -n numenv python scripts/verify.py <chi_dir> <om_dir> <chibb_dir>
   conda run -n numenv python scripts/verify.py --all [N]             # first N (or all) cases
   conda run -n numenv python scripts/verify.py --rebuild-summary     # rebuild SUMMARY.csv from outputs
-  --skip-existing   reuse cases already having overlay.png + pw_line.csv (resume)
+  --skip-existing   reuse cases already having pw_line.csv (resume)
   --no-summary      skip SUMMARY.csv write (for parallel workers; rebuild after)
 """
 import csv
@@ -26,7 +30,6 @@ import numpy as np  # noqa: E402
 import thermo as T  # noqa: E402
 import binodal as B  # noqa: E402
 import equilibrium as E  # noqa: E402
-import plotting as P  # noqa: E402
 import cases  # noqa: E402
 
 KAPPA = T.Kappa(1.0, 1.0)
@@ -86,26 +89,12 @@ def _load_pw(pw_csv):
     return raw if raw.size and raw.shape[1] == 2 else np.empty((0, 2))
 
 
-def _render(overlay, binodal, pw, rel):
-    branches = [{"points": pw, "state": "pw", "branch_id": 3}] if len(pw) else None
-    P.plot_phase_map(
-        overlay, binodal, pw_branches=branches,
-        title=f"Verify {rel[0]} | {rel[1]} | {rel[2]}",
-        params_text="ours (DE solver) — compare result/.../overlay_omega1_omega2.png",
-    )
-
-
 def verify_case(rel, chi, surf, skip_existing=False):
     out_dir = cases.verify_dir(rel, ROOT)
-    overlay = os.path.join(out_dir, "overlay.png")
     pw_csv = os.path.join(out_dir, "pw_line.csv")
-    # Resume keys on pw_line.csv (the expensive artifact). If only the plot is
-    # missing (e.g. a prior render crash), redraw it cheaply without recomputing.
+    # Resume keys on pw_line.csv (the only, and expensive, artifact here).
     if skip_existing and os.path.exists(pw_csv):
-        pw = _load_pw(pw_csv)
-        if not os.path.exists(overlay):
-            _render(overlay, B.binodal_from_hull(chi), pw, rel)
-        return _row_from_pw(rel, pw)
+        return _row_from_pw(rel, _load_pw(pw_csv))
 
     os.makedirs(out_dir, exist_ok=True)
     binodal = B.binodal_from_hull(chi)
@@ -113,7 +102,6 @@ def verify_case(rel, chi, surf, skip_existing=False):
 
     np.savetxt(pw_csv, pw if len(pw) else np.empty((0, 2)),
                delimiter=",", header="phi1_inf,phi2_inf", comments="")
-    _render(overlay, binodal, pw, rel)
     return _row_from_pw(rel, pw)
 
 

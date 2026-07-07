@@ -14,6 +14,43 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 
+def render_phase_map(
+    path,
+    *,
+    chi,
+    surf=None,
+    pw=None,
+    binodal=None,
+    title=None,
+    params_text=None,
+):
+    """Turn one case's inputs — experiment variables plus computed results —
+    into a phase-map PNG. General (variables + results) -> figure entry point,
+    independent of any experiment driver: pass the physical parameters and the
+    results, get a figure. Callers (verify, future experiments) only assemble
+    inputs; they do not touch matplotlib.
+
+    Experiment variables:
+      chi     : T.Chi — interaction params; fixes the bulk binodal (required).
+      surf    : T.Surf — surface energetics; only recorded in the caption, does
+                not change the phase-map geometry. Optional.
+    Computed results:
+      pw      : (N, 2) array of pre-wetting (phi1_inf, phi2_inf) points, or None.
+      binodal : precomputed BinodalResult; derived from `chi` if omitted (cheap).
+    """
+    if binodal is None:
+        import binodal as B  # lazy: only needed when not precomputed
+
+        binodal = B.binodal_from_hull(chi)
+    branches = (
+        [{"points": pw, "state": "pw", "branch_id": 3}]
+        if pw is not None and len(pw)
+        else None
+    )
+    plot_phase_map(path, binodal, pw_branches=branches, title=title,
+                   params_text=params_text)
+
+
 def plot_phase_map(
     path,
     binodal,

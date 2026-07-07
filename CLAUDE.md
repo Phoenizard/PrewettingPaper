@@ -27,6 +27,19 @@ Full model and solving condition: [doc/note/project_plan.md](doc/note/project_pl
   verification results go under `out/`, never a tmp directory. Produce phase-map / binodal
   figures with the numerical code in `src/` (the paper's method), not by hand.
 
+## SSH compute workflow
+
+Each session the user provides an SSH link (e.g. `ssh -p 32829 root@connect.cqa1.seetacloud.com`) —
+a CPU box, free to use for heavy compute. Session-start routine on the server:
+
+1. The project lives under `autodl-tmp/`, in a directory with the same name as the GitHub
+   repo (`autodl-tmp/PrewettingPaper`). `cd` there.
+2. `git pull` first, always. If any git command hangs (>30s no response), run
+   `source /etc/network_turbo` to enable acceleration, then retry. (network_turbo only
+   speeds github/hf; unset it before conda/pip — it slows those.)
+3. Check the `numenv` conda env exists. If it is missing, STOP and ask the user to install it —
+   do not build it yourself.
+
 ## Layout
 
 - `src/` — model modules (plain, importable via `sys.path`): `thermo.py` (bulk + surface
