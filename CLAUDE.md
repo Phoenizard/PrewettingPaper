@@ -34,9 +34,10 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 
 1. The project lives under `autodl-tmp/`, in a directory with the same name as the GitHub
    repo (`autodl-tmp/PrewettingPaper`). `cd` there.
-2. `git pull` first, always. If any git command hangs (>30s no response), run
-   `source /etc/network_turbo` to enable acceleration, then retry. (network_turbo only
-   speeds github/hf; unset it before conda/pip — it slows those.)
+2. `git pull` first, always. ALWAYS `source /etc/network_turbo` before any server-side
+   github op (pull/push/clone/fetch), in the same shell — proactively, not only after a
+   hang; without it the server cannot reach github.com:443 (curl 28 timeout). network_turbo
+   only speeds github/hf and SLOWS conda/pip, so do not leave it sourced for those.
 3. Check the `numenv` conda env exists. If it is missing, STOP and ask the user to install it —
    do not build it yourself.
 
