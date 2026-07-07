@@ -113,7 +113,10 @@ def _load_pw(pw_csv):
 
 
 def verify_case(rel, chi, surf, skip_existing=False):
-    out_dir = cases.verify_dir(rel, ROOT)
+    # VERIFY_OUT overrides the output root (e.g. out/verify_opt) so an optimized
+    # run produces results side-by-side without clobbering the baseline out/verify.
+    out_base = os.environ.get("VERIFY_OUT")
+    out_dir = os.path.join(out_base, *rel) if out_base else cases.verify_dir(rel, ROOT)
     pw_csv = os.path.join(out_dir, "pw_line.csv")
     # Resume keys on pw_line.csv (the only, and expensive, artifact here).
     if skip_existing and os.path.exists(pw_csv):
@@ -121,7 +124,8 @@ def verify_case(rel, chi, surf, skip_existing=False):
 
     os.makedirs(out_dir, exist_ok=True)
     binodal = B.binodal_from_hull(chi)
-    pw = prewetting_line(chi, surf, binodal)
+    prog = "/".join(rel) if os.environ.get("VERIFY_PROGRESS") else None
+    pw = prewetting_line(chi, surf, binodal, progress=prog)
 
     np.savetxt(pw_csv, pw if len(pw) else np.empty((0, 2)),
                delimiter=",", header="phi1_inf,phi2_inf", comments="")

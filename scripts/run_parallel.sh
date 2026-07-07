@@ -24,7 +24,7 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
 N="${1:-0}"
 CORES="${2:-$( (command -v nproc >/dev/null 2>&1 && nproc) || echo 4)}"
 PY="${PY:-conda run -n numenv python}"
-MANIFEST="result_cases.txt"
+MANIFEST="${MANIFEST:-result_cases.txt}"   # override to run a case subset (e.g. the 10 baselines)
 
 [ -f "$MANIFEST" ] || { echo "missing $MANIFEST" >&2; exit 1; }
 if [ "${N}" -gt 0 ] 2>/dev/null; then

@@ -29,7 +29,9 @@ import numpy as np  # noqa: E402
 import plotting as P  # noqa: E402
 import cases  # noqa: E402
 
-VERIFY_ROOT = os.path.join(ROOT, "out", "verify")
+# VERIFY_OUT overrides the results root (matches verify.py), so an optimized run
+# in out/verify_opt gets its overlays plotted too.
+VERIFY_ROOT = os.environ.get("VERIFY_OUT") or os.path.join(ROOT, "out", "verify")
 
 
 def _load_pw(pw_csv):
@@ -51,8 +53,8 @@ def _iter_done(root=VERIFY_ROOT):
 
 
 def plot_case(rel, force=False):
-    """Render out/verify/<rel>/overlay.png from its pw_line.csv. Returns a status."""
-    out_dir = cases.verify_dir(rel, ROOT)
+    """Render <VERIFY_ROOT>/<rel>/overlay.png from its pw_line.csv. Returns a status."""
+    out_dir = os.path.join(VERIFY_ROOT, *rel)
     overlay = os.path.join(out_dir, "overlay.png")
     pw_csv = os.path.join(out_dir, "pw_line.csv")
     if not os.path.exists(pw_csv):
