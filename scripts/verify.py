@@ -92,54 +92,82 @@ def _dense_fan(f_right, phi2):
     return [(fr, phi2), (0.97 * fr, phi2), (0.9, phi2), (0.7, phi2), (0.5, phi2)]
 
 
-def _branch_scan(chi, surf, fixed, scan_vals, axis, mode, f_right, progress=None):
-    """Build ONE surface branch along a reservoir scan, warm-started point to point.
+def _role_state(chi, res, surf, f_right, mode):
+    """find_states at res, return the role profile (st[0] thin / st[-1] thick) or None.
+    Requires >=2 states for the thick role (a lone state is the thin branch, not thick)."""
+    st = E.find_states(chi, res, surf, KAPPA, dense_seeds=_dense_fan(f_right, res[1]))
+    if not st:
+        return None
+    if mode == "thick" and len(st) < 2:
+        return None            # no distinct thick basin here
+    return st[0] if mode == "thin" else st[-1]
 
-    axis="phi1": fixed=phi2, scan_vals are phi1_inf (reservoir phi1 swept).
-    axis="phi2": fixed=phi1, scan_vals are phi2_inf.
-    mode="thin"  scans scan_vals ascending; the branch is the THINNEST state (st[0]).
-    mode="thick" scans REVERSED (descending); the branch is the THICKEST state (st[-1]).
 
-    Seeding: with no warm profile yet (branch start, or after a gap) we cold-find ALL
-    surface states via find_states (the validated multi-start with the dense phi1-rich
-    fan) and pick the role state — st[0] for thin, st[-1] for thick. This robustly grabs
-    the thick basin even when a third (middle) state is present, which a hand-built decay
-    seed cannot (it collapses into the thin basin). Once seeded, each subsequent point
-    warm-starts from the previous converged profile (cheap, follows the branch). A point
-    where the role state is absent / fails to converge is recorded NaN; warm is reset so
-    the next point re-seeds via find_states. Returns (gamma[], cs[]) aligned to scan_vals
-    ASCENDING. Streams one line per scan point when progress is a tag."""
-    order = list(range(len(scan_vals)))
-    if mode == "thick":
-        order = order[::-1]
-    gamma = [float("nan")] * len(scan_vals)
-    cs = [float("nan")] * len(scan_vals)
-    warm = None
-    for k in order:
-        sv = float(scan_vals[k])
-        res = (sv, fixed) if axis == "phi1" else (fixed, sv)
-        p = None
-        via = "warm"
-        if warm is not None:
-            p = E.solve_profile(chi, res, surf, KAPPA, warm=warm)
-        if p is None:  # (re)seed this branch via cold multi-start, pick the role state
-            via = "cold"
-            st = E.find_states(chi, res, surf, KAPPA, dense_seeds=_dense_fan(f_right, res[1]))
-            if st:
-                p = st[0] if mode == "thin" else st[-1]
-        tag_hit = "None"
+def _branch_scan(chi, surf, fixed, scan_vals, axis, mode, f_right, progress=None,
+                 max_seed_tries=6):
+    """Build ONE surface branch along a reservoir scan by SEED-then-SPREAD.
+
+    axis="phi1": fixed=phi2, scan_vals are phi1_inf. axis="phi2": fixed=phi1, scan phi2.
+    mode="thin" -> thinnest state (st[0]); mode="thick" -> thickest (st[-1]).
+
+    We first find a seed ANCHOR: cold-find states (validated dense fan) starting from the
+    high-phi1 / dense end and walking inward, until the role state exists (bounded by
+    max_seed_tries so we never grind through the no-state region). From that anchor we
+    warm-continue OUTWARD in both directions along scan_vals, each step warm-started from
+    the neighbour — cheap and follows the branch smoothly. A point that fails to warm-solve
+    ends that direction (the branch has left its region of existence). This calls the
+    expensive find_states O(1) times per branch, not per point. Returns (gamma[], cs[])
+    aligned to scan_vals ASCENDING, NaN where the branch is absent."""
+    n = len(scan_vals)
+    gamma = [float("nan")] * n
+    cs = [float("nan")] * n
+    # anchor search order: thick seeds best at high phi1 (dense end); thin at low phi1.
+    anchor_order = range(n - 1, -1, -1) if mode == "thick" else range(n)
+    anchor = None
+    tries = 0
+    for k in anchor_order:
+        if tries >= max_seed_tries:
+            break
+        tries += 1
+        res = (float(scan_vals[k]), fixed) if axis == "phi1" else (fixed, float(scan_vals[k]))
+        p = _role_state(chi, res, surf, f_right, mode)
         if p is not None:
+            anchor = k
+            gamma[k] = p.gamma
+            cs[k] = _adsorption(p, res)
+            _log_scan(progress, axis, mode, fixed, scan_vals[k],
+                      f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f} (seed)")
+            warm0 = (p.sol_x, p.sol_y)
+            break
+        _log_scan(progress, axis, mode, fixed, scan_vals[k], "None (seed-try)")
+    if anchor is None:
+        return np.asarray(gamma), np.asarray(cs)
+
+    # spread outward from the anchor in both directions, warm-started each step
+    for direction in (+1, -1):
+        warm = warm0
+        k = anchor + direction
+        while 0 <= k < n:
+            res = (float(scan_vals[k]), fixed) if axis == "phi1" else (fixed, float(scan_vals[k]))
+            p = E.solve_profile(chi, res, surf, KAPPA, warm=warm)
+            if p is None:
+                _log_scan(progress, axis, mode, fixed, scan_vals[k], "None (edge)")
+                break            # branch left its region of existence this way
             gamma[k] = p.gamma
             cs[k] = _adsorption(p, res)
             warm = (p.sol_x, p.sol_y)
-            tag_hit = f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f} ({via})"
-        else:
-            warm = None  # branch broke here; next point cold-reseeds
-        if progress:
-            print(f"[{progress}]   scan-{axis} {mode} fixed={fixed:.4f} "
-                  f"{'phi1' if axis=='phi1' else 'phi2'}={sv:.4f} -> {tag_hit}",
-                  file=sys.stderr, flush=True)
+            _log_scan(progress, axis, mode, fixed, scan_vals[k],
+                      f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f}")
+            k += direction
     return np.asarray(gamma), np.asarray(cs)
+
+
+def _log_scan(progress, axis, mode, fixed, sv, hit):
+    """Stream one per-scan-point progress line to stderr (when progress is a tag str)."""
+    if progress:
+        print(f"[{progress}]   scan-{axis} {mode} fixed={fixed:.4f} "
+              f"{'phi1' if axis=='phi1' else 'phi2'}={sv:.4f} -> {hit}",
+              file=sys.stderr, flush=True)
 
 
 def _crossings(scan_vals, g_thin, g_thick, cs_thin, cs_thick,
@@ -198,10 +226,13 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None,
     t0 = time.perf_counter()
 
     def phi1_window(phi2):
+        # The thin/middle/thick states and their gamma crossing live in a NARROW band
+        # around the dilute flank f_left(phi2) (probe: ~[bl-0.006, bl+0.012]); scan tight
+        # so we don't grind through the no-state region to the right.
         bl = f_left(phi2)
-        lo = max(1e-3, bl - 0.03)
-        hi = min(0.95, bl + 0.06)
-        return np.arange(lo, hi + 1e-9, 0.0025)
+        lo = max(1e-3, bl - 0.010)
+        hi = min(0.95, bl + 0.020)
+        return np.arange(lo, hi + 1e-9, 0.0015)
 
     pts = []
     # --- axis A: fix phi2, scan phi1 ---
