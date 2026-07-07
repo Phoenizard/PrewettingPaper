@@ -13,7 +13,7 @@ compute workers, and figures can be regenerated or restyled any time from the
 CSVs without recomputing.
 
 Usage:
-  conda run -n numenv python scripts/plot.py                          # every out/verify case with pw_line.csv
+  conda run -n numenv python scripts/plot.py                          # every out/ case with pw_line.csv
   conda run -n numenv python scripts/plot.py <chi_dir> <om_dir> <chibb_dir>   # one case
   conda run -n numenv python scripts/plot.py --all [N]               # first N cases (sorted)
   --force   redraw overlay.png even if it already exists
@@ -29,9 +29,9 @@ import numpy as np  # noqa: E402
 import plotting as P  # noqa: E402
 import cases  # noqa: E402
 
-# VERIFY_OUT overrides the results root (matches verify.py), so an optimized run
-# in out/verify_opt gets its overlays plotted too.
-VERIFY_ROOT = os.environ.get("VERIFY_OUT") or os.path.join(ROOT, "out", "verify")
+# VERIFY_OUT overrides the results root (matches verify.py), so a throwaway
+# side-by-side run in tmp/verify_opt gets its overlays plotted too.
+VERIFY_ROOT = os.environ.get("VERIFY_OUT") or os.path.join(ROOT, "out")
 
 
 def _load_pw(pw_csv):

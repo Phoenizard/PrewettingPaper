@@ -6,9 +6,9 @@ figure — so parallel workers never import matplotlib (no font-cache race) and
 compute never contends with rendering. Turn the data into figures separately
 with scripts/plot.py.
 
-Output mirrors result/ 1:1 under out/verify/<chi_dir>/<om_dir>/<chibb_dir>/:
+Output mirrors result/ 1:1 under out/<chi_dir>/<om_dir>/<chibb_dir>/:
   pw_line.csv   computed (phi1_inf, phi2_inf) transition points
-Top-level out/verify/SUMMARY.csv records every case run.
+Top-level out/SUMMARY.csv records every case run.
 
 Usage:
   conda run -n numenv python scripts/verify.py                       # T-a template case
@@ -35,7 +35,7 @@ import equilibrium as E  # noqa: E402
 import cases  # noqa: E402
 
 KAPPA = T.Kappa(1.0, 1.0)
-SUMMARY = os.path.join(ROOT, "out", "verify", "SUMMARY.csv")
+SUMMARY = os.path.join(ROOT, "out", "SUMMARY.csv")
 SUMMARY_COLS = ["chi_dir", "om_dir", "chibb_dir", "n_pw",
                 "phi1_min", "phi1_max", "phi2_min", "phi2_max", "status"]
 
@@ -149,21 +149,26 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
     surface-critical merge, so the line's endpoints — which per-line multi-start drops
     where the two branches nearly coincide — are recovered.
 
-    progress truthy -> one summary line to stderr. max_lines caps the seed band (a
-    dry-run smoke test; the continuation itself still traces the full line).
+    progress truthy -> stream live per-step progress to stderr (each seed scan, each
+    continuation point). max_lines caps the seed band (a dry-run smoke test; the
+    continuation itself still traces the full line).
     """
     f_left, f_right, apex = _branches(binodal)
     band = np.arange(0.03, min(0.09, 0.85 * apex), 0.01)
     if max_lines:
         band = band[:max_lines]
+    tag = progress if isinstance(progress, str) else "pw"
     t0 = time.perf_counter()
     seeds = []
-    for phi2 in band:
+    for i, phi2 in enumerate(band):
         r = _seed_scan(chi, surf, float(phi2), f_left, f_right)
         if r:
             phi1_star, tw, kw, sep = r
             seeds.append((float(phi2), phi1_star, tw, kw, sep))
-    tag = progress if isinstance(progress, str) else "pw"
+        if progress:  # seed scan is slow (multi-start BVP per phi2) -> stream each one
+            hit = f"phi1*={r[0]:.4f} sep={r[3]:.3f}" if r else "no pair"
+            print(f"[{tag}] seed {i+1}/{len(band)} phi2={phi2:.3f} {hit} "
+                  f"elapsed={time.perf_counter()-t0:.0f}s", file=sys.stderr, flush=True)
     if not seeds:
         if progress:
             print(f"[{tag}] no seed on band {band[0]:.2f}..{band[-1]:.2f}",
@@ -196,8 +201,8 @@ def _load_pw(pw_csv):
 
 
 def _out_dir(rel):
-    # VERIFY_OUT overrides the output root (e.g. out/verify_opt) so an optimized
-    # run produces results side-by-side without clobbering the baseline out/verify.
+    # VERIFY_OUT overrides the output root (e.g. tmp/verify_opt) so a throwaway
+    # side-by-side run does not clobber the baseline results under out/.
     base = os.environ.get("VERIFY_OUT")
     return os.path.join(base, *rel) if base else cases.verify_dir(rel, ROOT)
 
@@ -211,7 +216,10 @@ def verify_case(rel, chi, surf, skip_existing=False):
 
     os.makedirs(out_dir, exist_ok=True)
     binodal = B.binodal_from_hull(chi)
-    prog = "/".join(rel) if os.environ.get("VERIFY_PROGRESS") else None
+    # Progress streams by DEFAULT (per-step continuation lines to stderr): a long solve
+    # must show live progress, not sit silent until done. VERIFY_PROGRESS=0 opts out
+    # (e.g. a big parallel sweep where per-case interleaving would be noise).
+    prog = None if os.environ.get("VERIFY_PROGRESS") == "0" else "/".join(rel)
     max_lines = int(os.environ.get("PW_MAX_PHI2", "0")) or None  # dry-run cap
     pw = prewetting_line(chi, surf, binodal, progress=prog, max_lines=max_lines)
 
@@ -237,8 +245,8 @@ def _write_summary(rows):
 
 
 def _rebuild_summary():
-    """Rebuild SUMMARY.csv from every out/verify/.../pw_line.csv (post-parallel merge)."""
-    root = os.path.join(ROOT, "out", "verify")
+    """Rebuild SUMMARY.csv from every out/<chi>/<om>/<chibb>/pw_line.csv (post-parallel merge)."""
+    root = os.path.join(ROOT, "out")
     rows = []
     for chi_dir in sorted(os.listdir(root)) if os.path.isdir(root) else []:
         cp = os.path.join(root, chi_dir)

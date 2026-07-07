@@ -31,7 +31,7 @@ TOPOLOGIES = {
     "T-f": thermo.Chi(chi12=-8.5, chi1s=0.0, chi2s=0.0),
 }
 
-OUT_DIR = os.path.join(ROOT, "out", "_binodal_check")
+OUT_DIR = os.path.join(ROOT, "tmp", "binodal_check")
 
 
 def main():

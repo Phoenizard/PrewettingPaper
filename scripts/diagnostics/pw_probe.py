@@ -74,7 +74,7 @@ def main(argv):
         ax.set_ylabel("phi2")
         ax.set_title(rel[1])
         ax.legend(fontsize=8)
-        outdir = os.path.join(ROOT, "out", "diagnostics", rel[1])
+        outdir = os.path.join(ROOT, "tmp", "diagnostics", rel[1])
         os.makedirs(outdir, exist_ok=True)
         png = os.path.join(outdir, "pw_probe.png")
         fig.savefig(png, dpi=120, bbox_inches="tight")

@@ -1,11 +1,11 @@
-"""Case naming <-> parameters, and result/ <-> out/verify/ path mapping.
+"""Case naming <-> parameters, and result/ <-> out/ path mapping.
 
 We adopt result/'s directory naming verbatim (it is filesystem-safe, self-
 describing, sortable, and 1:1 with the parameters), so every verification output
-maps 1:1 to the result/ case it checks. Layout mirrored under out/verify/:
+maps 1:1 to the result/ case it checks. Layout mirrored under out/:
 
-    result/    <chi_dir>/<om_dir>/<chibb_dir>/overlay_omega1_omega2.png  (theirs)
-    out/verify/<chi_dir>/<om_dir>/<chibb_dir>/overlay.png , pw_line.csv  (ours)
+    result/ <chi_dir>/<om_dir>/<chibb_dir>/overlay_omega1_omega2.png  (theirs)
+    out/    <chi_dir>/<om_dir>/<chibb_dir>/overlay.png , pw_line.csv  (ours)
 
 Encoding (as in result/): value -> digits with '.'->'p', negative prefixed 'm'.
   chi_dir   : chi12_0p0__chi13_2p8__chi23_0p0     (chi13=chi1s, chi23=chi2s)
@@ -19,7 +19,7 @@ import os
 import thermo as T
 
 RESULT_ROOT = "result"
-VERIFY_ROOT = os.path.join("out", "verify")
+VERIFY_ROOT = "out"  # our results live directly under out/<chi>/<om>/<chibb>/ (no stage layer)
 
 
 def decode(tok: str) -> float:
@@ -69,7 +69,7 @@ def iter_cases(root: str = RESULT_ROOT):
 
 
 def verify_dir(rel: tuple, root: str = ".") -> str:
-    """out/verify/<chi_dir>/<om_dir>/<chibb_dir> for a case key `rel`."""
+    """out/<chi_dir>/<om_dir>/<chibb_dir> for a case key `rel`."""
     return os.path.join(root, VERIFY_ROOT, *rel)
 
 

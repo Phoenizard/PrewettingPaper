@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 import cases  # noqa: E402
 
 RESULTS_DB = os.path.abspath(os.environ.get("RESULTS_DB", os.path.join(ROOT, "database")))
-VERIFY = os.path.join(RESULTS_DB, "verify")
+VERIFY = RESULTS_DB  # results live directly under the DB root: <chi>/<om>/<chibb>/
 
 
 def _iter_db_cases():
@@ -39,7 +39,7 @@ def _iter_db_cases():
 
 
 def _load_summary():
-    """rel -> {n_pw, status} from database/verify/SUMMARY.csv (if present)."""
+    """rel -> {n_pw, status} from database/SUMMARY.csv (if present)."""
     path = os.path.join(VERIFY, "SUMMARY.csv")
     out = {}
     if os.path.exists(path):
@@ -82,7 +82,7 @@ def build():
             # RELATIVE urls (index.html sits at RESULTS_DB root); served by a local
             # http server so the browser has no file:// restriction. result/ resolves
             # through the in-DB symlink.
-            "ours": f"verify/{relpath}/overlay.png" if os.path.exists(ours_abs) else None,
+            "ours": f"{relpath}/overlay.png" if os.path.exists(ours_abs) else None,
             "theirs": f"result/{relpath}/overlay_omega1_omega2.png" if os.path.exists(theirs_abs) else None,
             "data": os.path.join(VERIFY, *rel, "pw_line.csv"),
         })

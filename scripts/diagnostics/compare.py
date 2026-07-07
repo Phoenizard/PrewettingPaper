@@ -1,10 +1,11 @@
 #!/usr/bin/env python
-"""Compare two computed result sets — a plain diff of SAVED pw_line.csv, done
-after the results exist (it reads result files, it does NOT recompute).
+"""Diagnostic: check two computed result sets agree — a plain diff of SAVED
+pw_line.csv, done after the results exist (reads result files, does NOT recompute).
+Same nature as pw_probe.py: it verifies consistency, it does not produce results.
 
-  conda run -n numenv python scripts/compare.py [pre_root] [post_root] [--tol 1e-3]
+  conda run -n numenv python scripts/diagnostics/compare.py [pre_root] [post_root] [--tol 1e-3]
 
-Defaults: pre=out/verify (baseline / 优化前结果), post=out/verify_opt (优化后结果).
+Defaults: pre=out (baseline results), post=tmp/verify_opt (a throwaway side-by-side run).
 For each case under pre_root that has a pw_line.csv, load both sides, match rows by
 phi2 (within 1e-6), and report max |dphi1| with PASS/FAIL(<=tol). A missing post
 side or a row-count mismatch is a hard fail. Exit code is nonzero if any case fails.
@@ -13,7 +14,7 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+ROOT = os.path.dirname(os.path.dirname(HERE))  # scripts/diagnostics -> repo root
 
 import numpy as np  # noqa: E402
 
@@ -61,8 +62,8 @@ def main(argv):
     # row-count difference is a hard fail (strict optimization-regression check).
     allow_extend = "--allow-extend" in argv
     argv = [x for x in argv if x != "--allow-extend"]
-    pre = argv[0] if len(argv) >= 1 else os.path.join("out", "verify")
-    post = argv[1] if len(argv) >= 2 else os.path.join("out", "verify_opt")
+    pre = argv[0] if len(argv) >= 1 else "out"
+    post = argv[1] if len(argv) >= 2 else os.path.join("tmp", "verify_opt")
 
     rels = sorted(_iter_cases(pre))
     if not rels:

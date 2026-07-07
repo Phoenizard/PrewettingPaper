@@ -22,16 +22,18 @@ TARGET="$(printf '%s\n' "$SSH" | grep -oE '[A-Za-z0-9._-]+@[A-Za-z0-9._.-]+' | h
 [ -n "$TARGET" ] || { echo "could not parse user@host from SSH='$SSH'" >&2; exit 1; }
 SSH_E="ssh -o ConnectTimeout=15${PORT:+ -p $PORT}"
 
-mkdir -p "$RESULTS_DB/verify"
-echo "pull: $TARGET:$REMOTE_DIR/out/verify/  ->  $RESULTS_DB/verify/"
+mkdir -p "$RESULTS_DB"
+echo "pull: $TARGET:$REMOTE_DIR/out/  ->  $RESULTS_DB/"
+# --delete would wipe local-only content; UNION merge instead. Exclude the server's
+# own log/ (pulled separately below) and SUMMARY handling is fine as a plain file.
 rsync -a -e "$SSH_E" \
-  "$TARGET:$REMOTE_DIR/out/verify/" "$RESULTS_DB/verify/"
+  "$TARGET:$REMOTE_DIR/out/" "$RESULTS_DB/"
 
 if [ "${1:-}" = "--logs" ]; then
-  mkdir -p "$RESULTS_DB/logs/verify"
+  mkdir -p "$RESULTS_DB/logs"
   rsync -a -e "$SSH_E" \
-    "$TARGET:$REMOTE_DIR/out/logs/verify/" "$RESULTS_DB/logs/verify/" || true
+    "$TARGET:$REMOTE_DIR/log/" "$RESULTS_DB/logs/" || true
 fi
 
-n="$(find "$RESULTS_DB/verify" -name pw_line.csv 2>/dev/null | wc -l | tr -d ' ')"
+n="$(find "$RESULTS_DB" -name pw_line.csv 2>/dev/null | wc -l | tr -d ' ')"
 echo "done. cases in DB: $n   (RESULTS_DB=$RESULTS_DB)"
