@@ -97,31 +97,37 @@ def _fd_branch_scan(solver, surf, fixed, scan_vals, axis, mode, progress=None):
                  the thick branch survive; a narrow window starting mid-range collapses to thin.
 
     The cold guess (guess_enrich) is applied ONCE at the first point of each branch; every
-    subsequent point warm-starts from the previous converged U. A point that fails to solve /
-    is rejected -> NaN, keep the previous warm U. Returns (gamma[], cs[]) aligned to scan_vals
-    ASCENDING (written by index, so iteration order is irrelevant to output order)."""
+    subsequent point warm-starts from the previous CONVERGED U. Two separate notions:
+      - WARM carry: any converged U (solve ok) becomes the warm seed for the next point,
+        EVEN IF it fails the far-field accept() gate. This matters at the high-phi1 birth of
+        the thick branch — there the thick film is wide and the far field is not the dilute
+        reservoir, so accept() rejects it for RECORDING, but the converged U is a perfectly
+        good warm seed to carry the thick branch inward to the crossing region.
+      - RECORD: gamma/cs are written only where accept() passes (a physical thin-film-on-
+        dilute-reservoir profile). A point that fails to converge keeps the previous warm U.
+    Returns (gamma[], cs[]) aligned to scan_vals ASCENDING (written by index)."""
     n = len(scan_vals)
     gamma = [float("nan")] * n
     cs = [float("nan")] * n
     order = range(n) if mode == "thin" else range(n - 1, -1, -1)
     U_guess = None
-    last_good = None
     for k in order:
         sv = float(scan_vals[k])
         res = (sv, fixed) if axis == "phi1" else (fixed, sv)
         if U_guess is None:
             U_guess = FD.guess_enrich(res, surf, solver.N, solver.L, mode)
         U, ok = solver.solve(U_guess, res)
-        if ok and solver.accept(U, res):
-            gamma[k] = solver.gamma(U, res)
-            cs[k] = _fd_adsorption(solver, U, res)
-            last_good = U.copy()
-            U_guess = last_good
-            _log_scan(progress, axis, mode, fixed, sv,
-                      f"g={gamma[k]:+.5f} cs={cs[k]:.3f} wall={U[0]:.3f}")
+        if ok:
+            U_guess = U.copy()                       # warm-carry any converged U
+            if solver.accept(U, res):                # record only physical profiles
+                gamma[k] = solver.gamma(U, res)
+                cs[k] = _fd_adsorption(solver, U, res)
+                _log_scan(progress, axis, mode, fixed, sv,
+                          f"g={gamma[k]:+.5f} cs={cs[k]:.3f} wall={U[0]:.3f}")
+            else:
+                _log_scan(progress, axis, mode, fixed, sv, f"warm-only wall={U[0]:.3f}")
         else:
-            U_guess = last_good      # keep previous warm U; NaN this point
-            _log_scan(progress, axis, mode, fixed, sv, f"None (ok={ok})")
+            _log_scan(progress, axis, mode, fixed, sv, "None (no converge)")
     return np.asarray(gamma), np.asarray(cs)
 
 
@@ -196,12 +202,17 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None,
     if solver is None:
         solver = FD.FDSolver(chi, surf, KAPPA)
 
-    # WIDE phi1 grid: from just inside the dilute flank out to the phi1-rich corner where
-    # the thick film is born (~apex + margin; the thick branch is robust by there, so no need
-    # to scan into the dense phase). Fixed across phi2 so one grid serves all.
+    # WIDE phi1 grid, TWO resolutions. The thick branch is born at HIGH phi1 near the dense
+    # flank f_right (cold thick converges there, ~0.88; it does NOT converge cold near apex),
+    # then warm-carried inward. So we need the birth point up near f_right, but only a COARSE
+    # trail from birth down to the crossing region, then a FINE grid where the crossing lives
+    # (the dilute flank). One grid fixed across phi2 serves all points.
     p1_lo = max(1e-3, f_left(min(0.08, 0.9 * apex)) - 0.02)
-    p1_hi = min(0.95, apex + 0.05)
-    phi1_grid = np.arange(p1_lo, p1_hi + 1e-9, 0.002)
+    p1_fine_hi = min(0.95, apex)                        # fine up to the apex (crossing region)
+    p1_birth = min(0.95, max(f_right(0.02), 0.6))       # thick birth near the dense flank
+    fine = np.arange(p1_lo, p1_fine_hi + 1e-9, 0.002)
+    coarse = np.arange(p1_fine_hi + 0.01, p1_birth + 1e-9, 0.01)  # trail to the birth point
+    phi1_grid = np.concatenate([fine, coarse])
 
     pts = []
     # --- axis A: fix phi2, scan phi1 (wide) ---
