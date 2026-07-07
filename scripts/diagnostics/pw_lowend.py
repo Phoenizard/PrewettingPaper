@@ -36,6 +36,85 @@ import verify as V  # noqa: E402
 KAPPA = E.T.Kappa(1.0, 1.0)
 
 
+def _solve_profile_why(chi, res, surf, seed=None, w=2.0, L=12.0, n=300, warm=None):
+    """Copy of equilibrium.solve_profile that, instead of a bare None, RETURNS WHY it
+    failed so the autopsy can tell apart the failure modes:
+      ('nonconv', sol)         solve_bvp did not converge (sol.success False)
+      ('reject', reasons, y)   converged but the post-solve sanity check killed it
+                               reasons subset of {phi1<0, phi2<0, sum>1}
+      ('ok', profile, width)   converged & accepted; width = z where |phi-phi_res|
+                               first falls below 1% of the wall excess (film width est.)
+    Mirrors src line-for-line (equilibrium.solve_profile, ~line 119) so its verdict is
+    the same one production would reach; reads only, no src change."""
+    res_arr = np.asarray(res, dtype=float)
+    m1i, m2i, fbi = E.T.reservoir_potentials(res_arr, chi)
+    res_mu = (m1i, m2i)
+    if warm is not None:
+        x, y0 = warm
+        if x.size > 2000:
+            xs = np.linspace(0.0, L, n)
+            y0 = np.vstack([np.interp(xs, x, y0[i]) for i in range(4)])
+            x = xs
+    else:
+        x = np.linspace(0.0, L, n)
+        y0 = E._guess(res_arr, seed, w, x)
+    fun_jac = (lambda z, y: E._fun_jac(z, y, chi, KAPPA)) if E.USE_ANALYTIC_JAC else None
+    bc_jac = (lambda ya, yb: E._bc_jac(ya, yb, surf, KAPPA)) if E.USE_ANALYTIC_JAC else None
+    from scipy.integrate import solve_bvp
+    sol = solve_bvp(
+        lambda z, y: E._rhs(z, y, chi, res_arr, KAPPA, res_mu),
+        lambda ya, yb: E._bc(ya, yb, chi, res_arr, surf, KAPPA),
+        x, y0, fun_jac=fun_jac, bc_jac=bc_jac, tol=1e-8, max_nodes=30000,
+    )
+    if not sol.success:
+        return ("nonconv", f"status={sol.status} nodes={sol.x.size} msg={sol.message}")
+    zf = np.linspace(0.0, L, 600)
+    y = sol.sol(zf)
+    reasons = []
+    if y[0].min() < -1e-3:
+        reasons.append(f"phi1min={y[0].min():.4f}")
+    if y[1].min() < -1e-3:
+        reasons.append(f"phi2min={y[1].min():.4f}")
+    if (y[0] + y[1]).max() > 1.0:
+        reasons.append(f"summax={(y[0]+y[1]).max():.4f}")
+    if reasons:
+        return ("reject", reasons)
+    # film width: distance where phi1 has relaxed to within 1% of its wall excess
+    wall_exc = abs(y[0][0] - res_arr[0])
+    width = L
+    if wall_exc > 1e-6:
+        below = np.where(np.abs(y[0] - res_arr[0]) < 0.01 * wall_exc)[0]
+        if below.size:
+            width = zf[below[0]]
+    return ("ok", (y[0][0], y[1][0]), width)
+
+
+def _thick_autopsy(chi, phi2, surf, warm_thick, phi1):
+    """At a failed (phi1, phi2), replay the thick branch's three attempts that
+    _solve_branch_adaptive makes (warm@L=12, _guess@L=24, _guess@L=42) and print WHY each
+    one is None (nonconv vs reject) or, if it converges, how wide the film is. This is the
+    core question: is the thick branch un-converging, being rejected, or too wide for L."""
+    res = (phi1, phi2)
+    wall_seed = None
+    if warm_thick is not None:
+        _, wy = warm_thick
+        wall_seed = (float(wy[0][0]), float(wy[1][0]))
+    print(f"    [autopsy] thick branch at phi1={phi1:.4f} phi2={phi2:.4f} "
+          f"wall_seed={wall_seed}", flush=True)
+    # attempt 1: warm @ L=12 (what production tries first)
+    r = _solve_profile_why(chi, res, surf, warm=warm_thick, L=12.0, n=300)
+    print(f"    [autopsy] warm@L=12  -> {r[0]}: {r[1:]}", flush=True)
+    # attempts 2,3: clean _guess seeded from wall, larger L (the fallback)
+    for k in (2.0, 3.5):
+        Lk, nk = 12.0 * k, int(round(300 * k))
+        r = _solve_profile_why(chi, res, surf, seed=wall_seed, L=Lk, n=nk)
+        print(f"    [autopsy] guess@L={Lk:.0f} (w=2.0) -> {r[0]}: {r[1:]}", flush=True)
+    # extra probes: does a LONGER guess length-scale w help at L=42?
+    for w in (6.0, 12.0):
+        r = _solve_profile_why(chi, res, surf, seed=wall_seed, L=42.0, n=1050, w=w)
+        print(f"    [autopsy] guess@L=42 w={w:.0f} -> {r[0]}: {r[1:]}", flush=True)
+
+
 def _pw_point_diag(chi, phi2, surf, warm_thin, warm_thick, phi1_guess,
                    merge_tol=3e-3, xtol=1e-6, max_it=40, h=3e-4):
     """Instrumented copy of equilibrium.pw_point: returns (label, info, thin, thick).
@@ -124,6 +203,10 @@ def main(argv):
         print(f"  {phi2n:.4f}   {lab}    {info}{gapstr}", flush=True)
         if lab != "OK":
             print(f"  -> stops at phi2={phi2n:.4f} via exit {lab}", flush=True)
+            # Autopsy the THICK branch at the failing point: is it non-converging, being
+            # rejected, or just too wide for L=12 — and does a longer guess length-scale
+            # rescue it? (warm_k is the last accepted thick profile = the warm start used.)
+            _thick_autopsy(chi, phi2n, surf, warm_k, guess)
             break
         # accept: chain warm starts and predictor
         phi1_star = float(info[1].split("=")[1])
