@@ -1,6 +1,9 @@
 # Reference sweep (242MB of PNGs) stays local; server uses result_cases.txt instead
 result/
 
+# Colleague's reference implementation (local study only; not ours, not shared)
+reference/
+
 # Generated verification outputs / diagnostics
 out/
 

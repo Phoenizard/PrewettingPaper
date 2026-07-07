@@ -61,160 +61,210 @@ def _branches(binodal):
     return f_left, f_right, apex_phi2
 
 
-def _seed_scan(chi, surf, phi2, f_left, f_right, progress=None):
-    """Multi-start scan at fixed phi2; on the first thin/thick gamma sign change return
-    (phi1_star, thin_warm, thick_warm, sep), else None. Only used to SEED the
-    continuation with one well-separated point on the line (its converged thin/thick
-    profiles), not to trace the whole line.
+# ---------------------------------------------------------------------------
+# Pre-wetting line by DUAL-SCAN + CROSSING (replaces the old branch continuation).
+#
+# The continuation (seed multi-start + pw_point secant tracking two live branches)
+# was fragile at the low-phi2 end: a third (middle) surface state appears, the thick
+# branch is lost/mis-tracked, and the line falsely terminates. Instead we build the two
+# gamma(phi_scan) curves INDEPENDENTLY — a thin branch (forward warm-start scan) and a
+# thick branch (backward warm-start scan) — then read off the pre-wetting point as the
+# gamma_thin == gamma_thick crossing, gated by a real film-thickness step (adsorption
+# gap). A dropped (non-converged) point is just a gap; the crossing is still recovered
+# from finite neighbours, so losing a branch point no longer kills the line.
+#
+# This mirrors the reference implementation's _run_hysteresis_scan +
+# _extract_prewetting_crossings, re-implemented in our own code on solve_profile.
+# ---------------------------------------------------------------------------
 
-    progress (a tag str) -> stream one line PER phi1 start point, so the seed scan (a
-    slow multi-start BVP loop) is never a silent block: every loop iteration is logged."""
-    bl = f_left(phi2)
-    dense = [(f_right(phi2), phi2), (0.97 * f_right(phi2), phi2)]
-    grid = bl + np.arange(-0.03, 0.012, 0.0025)
-    grid = grid[grid > 1e-3]
-    prev = None
-    prev_states = None
-    for i, phi1 in enumerate(grid):
-        st = E.find_states(chi, (phi1, phi2), surf, KAPPA, dense_seeds=dense,
-                           warm=prev_states)
-        hit = ""
-        if len(st) >= 2:
-            prev_states = ((st[0].sol_x, st[0].sol_y), (st[-1].sol_x, st[-1].sol_y))
-            d = st[0].gamma - st[-1].gamma
-            if prev is not None and prev[1] * d < 0:
-                p0, d0 = prev
-                phi1_star = p0 + (phi1 - p0) * (0 - d0) / (d - d0)
-                sep = abs(st[0].phi[0][0] - st[-1].phi[0][0])
-                if progress:
-                    print(f"[{progress}]   seed-scan phi2={phi2:.3f} pt {i+1}/{len(grid)} "
-                          f"phi1={phi1:.4f} n_states={len(st)} dgamma={d:+.2e} "
-                          f"SIGN-CHANGE -> phi1*={phi1_star:.4f} sep={sep:.3f}",
-                          file=sys.stderr, flush=True)
-                return (phi1_star, (st[0].sol_x, st[0].sol_y),
-                        (st[-1].sol_x, st[-1].sol_y), sep)
-            prev = (phi1, d)
-            hit = f"n_states={len(st)} dgamma={d:+.2e}"
+_trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))  # numpy>=2 renamed trapz
+
+
+def _adsorption(prof, res):
+    """Total Gibbs adsorption cs = INT[(phi1-phi1_inf) + (phi2-phi2_inf)] dz (film size)."""
+    return float(_trapz((prof.phi[0] - res[0]) + (prof.phi[1] - res[1]), prof.z))
+
+
+def _branch_scan(chi, surf, fixed, scan_vals, axis, mode, f_right, progress=None):
+    """Build ONE surface branch along a reservoir scan, warm-started point to point.
+
+    axis="phi1": fixed=phi2, scan_vals are phi1_inf (reservoir phi1 swept).
+    axis="phi2": fixed=phi1, scan_vals are phi2_inf.
+    mode="thin"  scans scan_vals in the given (ascending) order; the cold seed is a small
+                 wall enrichment (near-reservoir) — the thin basin.
+    mode="thick" scans in REVERSE (descending); the cold seed is a phi1-rich wall plateau
+                 (dense flank) — the thick basin. Reverse + high-phi1 start keeps the thick
+                 attractor, exactly where independent multi-start loses it.
+
+    Each point warm-starts from the previous converged profile (solve_profile(warm=...));
+    a non-converged point is recorded as NaN and the previous warm seed is kept. Returns
+    (gamma[], cs[]) aligned to scan_vals ASCENDING (thick is reversed back before return),
+    NaN where the solve failed. Streams one line per scan point when progress is a tag."""
+    order = list(range(len(scan_vals)))
+    if mode == "thick":
+        order = order[::-1]
+    gamma = [float("nan")] * len(scan_vals)
+    cs = [float("nan")] * len(scan_vals)
+    warm = None
+    for k in order:
+        sv = float(scan_vals[k])
+        res = (sv, fixed) if axis == "phi1" else (fixed, sv)
+        if warm is None:  # cold seed for this branch's basin
+            if mode == "thin":
+                seed = (min(0.98, res[0] + 0.02), res[1])
+                w = 2.0
+            else:  # thick: phi1-rich wall plateau from the dense flank
+                fr = f_right(res[1]) if axis == "phi1" else f_right(fixed)
+                seed = (max(res[0] + 0.05, min(0.95, fr)), res[1])
+                w = 4.0
+            p = E.solve_profile(chi, res, surf, KAPPA, seed=seed, w=w)
         else:
-            prev = None
-            prev_states = None
-            hit = f"n_states={len(st)} (no pair)"
+            p = E.solve_profile(chi, res, surf, KAPPA, warm=warm)
+        tag_hit = "None"
+        if p is not None:
+            gamma[k] = p.gamma
+            cs[k] = _adsorption(p, res)
+            warm = (p.sol_x, p.sol_y)
+            tag_hit = f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f}"
         if progress:
-            print(f"[{progress}]   seed-scan phi2={phi2:.3f} pt {i+1}/{len(grid)} "
-                  f"phi1={phi1:.4f} {hit}", file=sys.stderr, flush=True)
-    return None
+            print(f"[{progress}]   scan-{axis} {mode} fixed={fixed:.4f} "
+                  f"{'phi1' if axis=='phi1' else 'phi2'}={sv:.4f} -> {tag_hit}",
+                  file=sys.stderr, flush=True)
+    return np.asarray(gamma), np.asarray(cs)
 
 
-def _continue(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.001,
-              phi2_ceiling=0.15, max_steps=200, min_dphi2=6.25e-4, tag=None):
-    """March the PW line from seed=(phi2, phi1_star, thin_warm, thick_warm) in
-    `direction` (+1 up / -1 down), tracking the two branches with E.pw_point until they
-    merge (terminus) or we leave the dilute flank. Returns [(phi1_star, phi2)].
-
-    Adaptive step: a corrector failure does NOT immediately end the line — the phi2 step
-    is halved and retried (phi2 not advanced), down to min_dphi2, and only a failure at
-    that finest step is a real terminus. This is unconditional (every case uses it): on an
-    easy line the first attempt succeeds and no halving happens, so behaviour is unchanged;
-    on a line whose branches nearly coincide at the ends it recovers the points a coarse
-    fixed step would skip over. After a success the step is restored toward dphi2 (doubled,
-    capped) so the interior stays fast. Progress is streamed per accepted point / halving."""
-    phi2_s, phi1_s, tw, kw = seed
+def _crossings(scan_vals, g_thin, g_thick, cs_thin, cs_thick,
+               cs_threshold=0.1, min_pts=2, terminal_relax=0.67):
+    """Pre-wetting crossings = sign changes of (g_thin - g_thick) where both branches are
+    finite and the film-thickness gap |cs_thick - cs_thin| exceeds cs_threshold (a real
+    thin->thick step, not spinodal noise). Linear-interpolate each sign change to the exact
+    scan value. Falls back to a relaxed-gate boundary crossing (the line's endpoint) when no
+    interior crossing is gated in. Returns a list of scan values (phi1* or phi2*)."""
+    scan_vals = np.asarray(scan_vals, float)
+    diff = g_thin - g_thick
+    gap = np.abs(cs_thick - cs_thin)
+    eligible = np.isfinite(diff) & np.isfinite(gap)
+    valid = eligible & (gap > cs_threshold)
     out = []
-    p1_prev, p1_prev2 = phi1_s, None
-    phi2 = phi2_s
-    step = dphi2
-    for _ in range(max_steps):
-        phi2n = round(phi2 + direction * step, 10)
-        if phi2n <= phi2_floor or phi2n >= min(apex, phi2_ceiling):
-            break
-        guess = p1_prev if p1_prev2 is None else (2.0 * p1_prev - p1_prev2)
-        res = E.pw_point(chi, phi2n, surf, KAPPA, tw, kw, guess, max_it=20)
-        if res is None:
-            if step > min_dphi2 + 1e-12:
-                step = max(min_dphi2, step * 0.5)  # shrink and retry from same phi2
-                if tag:
-                    print(f"[{tag}] {'down' if direction < 0 else 'up'} "
-                          f"phi2~{phi2n:.4f} corrector miss -> step={step:.5f}",
-                          file=sys.stderr, flush=True)
+    if int(valid.sum()) >= min_pts:
+        idx = np.where(eligible)[0]
+        splits = np.where(np.diff(idx) > 1)[0] + 1
+        for region in np.split(idx, splits):
+            rv = region[valid[region]]
+            if rv.size < 2:
                 continue
-            break  # failed even at the finest step -> real line terminus
-        phi1_star, thin, thick = res
-        out.append((phi1_star, phi2n))
-        if tag:
-            print(f"[{tag}] {'down' if direction < 0 else 'up'} "
-                  f"phi2={phi2n:.4f} phi1*={phi1_star:.4f} step={step:.5f} "
-                  f"n={len(out)}", file=sys.stderr, flush=True)
-        tw = (thin.sol_x, thin.sol_y)
-        kw = (thick.sol_x, thick.sol_y)
-        p1_prev2, p1_prev = p1_prev, phi1_star
-        phi2 = phi2n
-        if step < dphi2:
-            step = min(dphi2, step * 2.0)  # recover toward the nominal step in the interior
+            sign_changes = np.where(np.diff(np.sign(diff[rv])) != 0)[0]
+            for k in sign_changes.tolist():
+                i, j = int(rv[k]), int(rv[k + 1])
+                out.append(_interp_zero(scan_vals[i], scan_vals[j], diff[i], diff[j]))
+    if not out and int(valid.sum()) > 0:  # terminal-boundary fallback (line endpoint)
+        near = eligible & (gap > cs_threshold * terminal_relax)
+        y1, y2 = diff[:-1], diff[1:]
+        crossed = np.isfinite(y1) & np.isfinite(y2) & ((y1 * y2) <= 0.0)
+        bnd = (valid[:-1] != valid[1:]) & near[:-1] & near[1:] & crossed
+        for i in np.where(bnd)[0].tolist():
+            out.append(_interp_zero(scan_vals[i], scan_vals[i + 1], y1[i], y2[i]))
     return out
 
 
-def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
-    """(phi1*, phi2) pre-wetting points (gamma_thin == gamma_thick) along the dilute
-    flank, by branch CONTINUATION.
+def _interp_zero(x0, x1, y0, y1):
+    """Linear-interpolate the zero crossing of y(x) between (x0,y0) and (x1,y1)."""
+    if y1 == y0:
+        return float(x0)
+    return float(x0 - y0 * (x1 - x0) / (y1 - y0))
 
-    A short multi-start seed pass over a middle phi2 band finds a well-separated
-    thin/thick pair on the line; the continuation then tracks that pair outward in both
-    phi2 directions (equilibrium.pw_point) down toward the binary limit and up to the
-    surface-critical merge, so the line's endpoints — which per-line multi-start drops
-    where the two branches nearly coincide — are recovered.
 
-    progress truthy -> stream live per-step progress to stderr (each seed scan, each
-    continuation point). max_lines caps the seed band (a dry-run smoke test; the
-    continuation itself still traces the full line).
-    """
+def prewetting_line(chi, surf, binodal, progress=None, max_lines=None,
+                    cs_threshold=0.1, min_pts=2):
+    """(phi1*, phi2) pre-wetting points (gamma_thin == gamma_thick) by DUAL-SCAN crossing.
+
+    Two scan axes, unioned:
+      fix_phi2 scan phi1 -> phi1*(phi2), the shallow parts of the line;
+      fix_phi1 scan phi2 -> phi2*(phi1), the near-vertical low-phi2 tail toward phi2->0.
+    Each axis builds a thin (forward) and thick (backward) branch via _branch_scan, then
+    reads crossings via _crossings. progress truthy -> stream one line per scan point.
+    max_lines caps the number of fixed values per axis (dry-run smoke test)."""
     f_left, f_right, apex = _branches(binodal)
-    band = np.arange(0.03, min(0.09, 0.85 * apex), 0.01)
-    if max_lines:
-        band = band[:max_lines]
     tag = progress if isinstance(progress, str) else "pw"
     t0 = time.perf_counter()
-    # The continuation only needs ONE sturdy starting point: a phi2 whose thin/thick pair
-    # is well separated. Separation varies monotonically across the band, so we do NOT
-    # scan all of it — we take the FIRST phi2 whose sep clears SEED_SEP_OK and stop. Only
-    # if none clears the bar do we fall back to the widest we found. This cuts the seed
-    # phase from ~6 scans to typically 1-2.
-    SEED_SEP_OK = 0.30
-    seeds = []
-    for i, phi2 in enumerate(band):
-        if progress:  # announce each phi2 BEFORE its (slow) scan, so no silent block
-            print(f"[{tag}] seed {i+1}/{len(band)} 计算 phi2={phi2:.3f} ...",
-                  file=sys.stderr, flush=True)
-        r = _seed_scan(chi, surf, float(phi2), f_left, f_right,
-                       progress=tag if progress else None)
-        if r:
-            phi1_star, tw, kw, sep = r
-            seeds.append((float(phi2), phi1_star, tw, kw, sep))
-        if progress:  # per-phi2 summary after its point-by-point scan
-            hit = f"phi1*={r[0]:.4f} sep={r[3]:.3f}" if r else "no pair"
-            print(f"[{tag}] seed {i+1}/{len(band)} phi2={phi2:.3f} DONE {hit} "
-                  f"elapsed={time.perf_counter()-t0:.0f}s", file=sys.stderr, flush=True)
-        if r and sep >= SEED_SEP_OK:  # good enough -> stop scanning the rest of the band
-            if progress:
-                print(f"[{tag}] seed chosen at phi2={phi2:.3f} (sep={sep:.3f} "
-                      f">= {SEED_SEP_OK}); skipping remaining {len(band)-i-1} phi2",
-                      file=sys.stderr, flush=True)
-            break
-    if not seeds:
+
+    def phi1_window(phi2):
+        bl = f_left(phi2)
+        lo = max(1e-3, bl - 0.03)
+        hi = min(0.95, bl + 0.06)
+        return np.arange(lo, hi + 1e-9, 0.0025)
+
+    pts = []
+    # --- axis A: fix phi2, scan phi1 ---
+    phi2_band = np.arange(0.005, min(0.09, 0.95 * apex), 0.005)
+    if max_lines:
+        phi2_band = phi2_band[:max_lines]
+    for i, phi2 in enumerate(phi2_band):
+        phi2 = float(phi2)
+        grid = phi1_window(phi2)
         if progress:
-            print(f"[{tag}] no seed on band {band[0]:.2f}..{band[-1]:.2f}",
+            print(f"[{tag}] axisA fix_phi2 {i+1}/{len(phi2_band)} phi2={phi2:.4f} "
+                  f"scan {len(grid)} phi1 in [{grid[0]:.4f},{grid[-1]:.4f}]",
                   file=sys.stderr, flush=True)
+        gt, ct = _branch_scan(chi, surf, phi2, grid, "phi1", "thin", f_right,
+                              progress=tag if progress else None)
+        gk, ck = _branch_scan(chi, surf, phi2, grid, "phi1", "thick", f_right,
+                              progress=tag if progress else None)
+        cr = _crossings(grid, gt, gk, ct, ck, cs_threshold, min_pts)
+        for p1 in cr:
+            pts.append((float(p1), phi2))
+        if progress:
+            print(f"[{tag}] axisA phi2={phi2:.4f} -> {len(cr)} crossing(s) "
+                  f"phi1*={[round(x,4) for x in cr]}  elapsed={time.perf_counter()-t0:.0f}s",
+                  file=sys.stderr, flush=True)
+
+    # --- axis B: fix phi1, scan phi2 (recovers the near-vertical low-phi2 tail) ---
+    phi1_lo = f_left(0.005)
+    phi1_hi = f_left(min(0.08, 0.9 * apex))
+    phi1_band = np.arange(min(phi1_lo, phi1_hi) - 0.005,
+                          max(phi1_lo, phi1_hi) + 0.02, 0.005)
+    if max_lines:
+        phi1_band = phi1_band[:max_lines]
+    for i, phi1 in enumerate(phi1_band):
+        phi1 = float(phi1)
+        grid = np.arange(0.002, min(0.09, 0.95 * apex) + 1e-9, 0.0025)
+        if progress:
+            print(f"[{tag}] axisB fix_phi1 {i+1}/{len(phi1_band)} phi1={phi1:.4f} "
+                  f"scan {len(grid)} phi2 in [{grid[0]:.4f},{grid[-1]:.4f}]",
+                  file=sys.stderr, flush=True)
+        gt, ct = _branch_scan(chi, surf, phi1, grid, "phi2", "thin", f_right,
+                              progress=tag if progress else None)
+        gk, ck = _branch_scan(chi, surf, phi1, grid, "phi2", "thick", f_right,
+                              progress=tag if progress else None)
+        cr = _crossings(grid, gt, gk, ct, ck, cs_threshold, min_pts)
+        for p2 in cr:
+            pts.append((phi1, float(p2)))
+        if progress:
+            print(f"[{tag}] axisB phi1={phi1:.4f} -> {len(cr)} crossing(s) "
+                  f"phi2*={[round(x,4) for x in cr]}  elapsed={time.perf_counter()-t0:.0f}s",
+                  file=sys.stderr, flush=True)
+
+    if not pts:
+        if progress:
+            print(f"[{tag}] no crossings on either axis", file=sys.stderr, flush=True)
         return np.array([])
-    best = max(seeds, key=lambda s: s[4])  # widest branch separation = sturdiest seed
-    seed = (best[0], best[1], best[2], best[3])
-    down = _continue(chi, surf, seed, apex, -1, tag=tag if progress else None)
-    up = _continue(chi, surf, seed, apex, +1, tag=tag if progress else None)
-    pw = sorted([(best[1], best[0])] + down + up, key=lambda p: p[1])
+    pw = _dedup_points(pts)
     if progress:
         el = time.perf_counter() - t0
-        print(f"[{tag}] seed@phi2={best[0]:.3f} sep={best[4]:.3f}  down+{len(down)} "
-              f"up+{len(up)}  n={len(pw)}  phi2=[{pw[0][1]:.3f},{pw[-1][1]:.3f}]  "
-              f"elapsed={el:.0f}s", file=sys.stderr, flush=True)
-    return np.array(pw)
+        print(f"[{tag}] dual-scan done: {len(pw)} pw points  "
+              f"phi2=[{pw[:,1].min():.4f},{pw[:,1].max():.4f}]  elapsed={el:.0f}s",
+              file=sys.stderr, flush=True)
+    return pw
+
+
+def _dedup_points(pts, tol=2e-3):
+    """Merge near-duplicate (phi1, phi2) points from the two scan axes; sort by phi2."""
+    arr = np.asarray(sorted(pts, key=lambda p: (p[1], p[0])), float)
+    keep = []
+    for p in arr:
+        if all(np.hypot(p[0] - q[0], p[1] - q[1]) > tol for q in keep):
+            keep.append(p)
+    return np.asarray(sorted(keep, key=lambda p: p[1]), float)
 
 
 def _row_from_pw(rel, pw):
