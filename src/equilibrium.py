@@ -244,28 +244,44 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
 # merge. Reuses solve_profile(warm=...) and Profile.sol_x/sol_y.
 # ---------------------------------------------------------------------------
 
-def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, dense_seeds=None):
+def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, dense_seeds=None,
+                           role=None):
     """Warm-solve one branch; if the warm start fails, fall back to a COLD multi-start
-    (find_states) and pick the state whose wall phi1 is closest to the warm branch.
+    (find_states) and pick the state by `role`.
 
     Diagnosed root cause (om2=-0.40, phi2≈0.026): the thick branch's wall composition
     jumps sharply along the line (e.g. wall phi1 0.92 -> 0.67 over a tiny phi2/phi1 step
     near the surface-critical region). A warm start anchored on the old wall value (0.92)
     cannot follow the jump — solve_bvp chases a solution that isn't there and blows past
     max_nodes. A cold multi-start (find_states, dense_seeds) is NOT anchored and still
-    finds both branches; we then pick the one closest to the warm branch to stay on it.
+    finds the branches; we then pick the correct one by role.
     (Growing L was the wrong fix: the film is narrow ~4, and larger L only exhausts
-    max_nodes faster.) Returns a Profile or None."""
+    max_nodes faster.)
+
+    `role` fixes WHICH cold state to pick when a third (middle) surface state appears at
+    low phi2 (walls ≈ 0.34 thin / 0.68 middle / 0.92 thick). The thin/thick pair that is
+    ever equal-gamma (the true pre-wetting transition) is always the thinnest & thickest;
+    the middle state is a higher-gamma barrier and must be ignored. So:
+      role="thin"  -> thinnest cold state (min wall phi1)
+      role="thick" -> thickest cold state (max wall phi1)
+      role=None    -> closest to the warm anchor (legacy; used by non-tracking callers).
+    Picking closest-to-anchor was the bug: after the 0.92 anchor vanished, the nearest
+    survivor could be the middle 0.68, so the thick branch fell onto the barrier and
+    falsely "merged" with thin. Returns a Profile or None."""
     p = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm)
     if p is not None:
         return p
     if warm is None:
         return None
-    _, wy = warm
-    wall_phi1 = float(wy[0][0])  # the branch we were tracking, by wall phi1
     cold = find_states(chi, res, surf, kappa, dense_seeds=dense_seeds, L=L, n=n)
     if not cold:
         return None
+    if role == "thin":
+        return min(cold, key=lambda s: float(s.phi[0][0]))   # thinnest state
+    if role == "thick":
+        return max(cold, key=lambda s: float(s.phi[0][0]))   # thickest state
+    _, wy = warm
+    wall_phi1 = float(wy[0][0])  # the branch we were tracking, by wall phi1
     return min(cold, key=lambda s: abs(float(s.phi[0][0]) - wall_phi1))
 
 
@@ -273,8 +289,8 @@ def track_branches(chi, res, surf, kappa, warm_thin, warm_thick, L=12.0, n=300):
     """Warm-solve the thin and thick branch at reservoir res from converged neighbours
     `warm_thin`/`warm_thick` (each an (x, y) mesh+state). Either return may be None if
     that branch failed to converge even after growing the domain."""
-    thin = _solve_branch_adaptive(chi, res, surf, kappa, warm_thin, L, n)
-    thick = _solve_branch_adaptive(chi, res, surf, kappa, warm_thick, L, n)
+    thin = _solve_branch_adaptive(chi, res, surf, kappa, warm_thin, L, n, role="thin")
+    thick = _solve_branch_adaptive(chi, res, surf, kappa, warm_thick, L, n, role="thick")
     return thin, thick
 
 
