@@ -92,28 +92,50 @@ def _seed_scan(chi, surf, phi2, f_left, f_right):
 
 
 def _continue(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.001,
-              phi2_ceiling=0.15, max_steps=80):
+              phi2_ceiling=0.15, max_steps=200, min_dphi2=6.25e-4, tag=None):
     """March the PW line from seed=(phi2, phi1_star, thin_warm, thick_warm) in
     `direction` (+1 up / -1 down), tracking the two branches with E.pw_point until they
-    merge (terminus) or we leave the dilute flank. Returns [(phi1_star, phi2)]."""
+    merge (terminus) or we leave the dilute flank. Returns [(phi1_star, phi2)].
+
+    Adaptive step: a corrector failure does NOT immediately end the line — the phi2 step
+    is halved and retried (phi2 not advanced), down to min_dphi2, and only a failure at
+    that finest step is a real terminus. This is unconditional (every case uses it): on an
+    easy line the first attempt succeeds and no halving happens, so behaviour is unchanged;
+    on a line whose branches nearly coincide at the ends it recovers the points a coarse
+    fixed step would skip over. After a success the step is restored toward dphi2 (doubled,
+    capped) so the interior stays fast. Progress is streamed per accepted point / halving."""
     phi2_s, phi1_s, tw, kw = seed
     out = []
     p1_prev, p1_prev2 = phi1_s, None
     phi2 = phi2_s
+    step = dphi2
     for _ in range(max_steps):
-        phi2n = round(phi2 + direction * dphi2, 10)
+        phi2n = round(phi2 + direction * step, 10)
         if phi2n <= phi2_floor or phi2n >= min(apex, phi2_ceiling):
             break
         guess = p1_prev if p1_prev2 is None else (2.0 * p1_prev - p1_prev2)
         res = E.pw_point(chi, phi2n, surf, KAPPA, tw, kw, guess, max_it=20)
         if res is None:
-            break  # branches merged / a branch collapsed -> line terminus
+            if step > min_dphi2 + 1e-12:
+                step = max(min_dphi2, step * 0.5)  # shrink and retry from same phi2
+                if tag:
+                    print(f"[{tag}] {'down' if direction < 0 else 'up'} "
+                          f"phi2~{phi2n:.4f} corrector miss -> step={step:.5f}",
+                          file=sys.stderr, flush=True)
+                continue
+            break  # failed even at the finest step -> real line terminus
         phi1_star, thin, thick = res
         out.append((phi1_star, phi2n))
+        if tag:
+            print(f"[{tag}] {'down' if direction < 0 else 'up'} "
+                  f"phi2={phi2n:.4f} phi1*={phi1_star:.4f} step={step:.5f} "
+                  f"n={len(out)}", file=sys.stderr, flush=True)
         tw = (thin.sol_x, thin.sol_y)
         kw = (thick.sol_x, thick.sol_y)
         p1_prev2, p1_prev = p1_prev, phi1_star
         phi2 = phi2n
+        if step < dphi2:
+            step = min(dphi2, step * 2.0)  # recover toward the nominal step in the interior
     return out
 
 
@@ -149,8 +171,8 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
         return np.array([])
     best = max(seeds, key=lambda s: s[4])  # widest branch separation = sturdiest seed
     seed = (best[0], best[1], best[2], best[3])
-    down = _continue(chi, surf, seed, apex, -1)
-    up = _continue(chi, surf, seed, apex, +1)
+    down = _continue(chi, surf, seed, apex, -1, tag=tag if progress else None)
+    up = _continue(chi, surf, seed, apex, +1, tag=tag if progress else None)
     pw = sorted([(best[1], best[0])] + down + up, key=lambda p: p[1])
     if progress:
         el = time.perf_counter() - t0
