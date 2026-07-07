@@ -67,7 +67,7 @@ def _laplacian_block(kappa, N, h):
 class FDSolver:
     """Fixed grid (L, N); build A and the constant wall-Jacobian once, reuse per solve."""
 
-    def __init__(self, chi, surf, kappa, L=40.0, N=2000):
+    def __init__(self, chi, surf, kappa, L=15.0, N=1500):
         self.chi = chi
         self.surf = surf
         self.kappa = kappa
@@ -148,6 +148,23 @@ class FDSolver:
                 return U, False
         return U, False
 
+    def accept(self, U, res, margin=3.0, far_tol=5e-3):
+        """Reject a converged U that is unphysical or whose film reaches the far boundary
+        (box too small -> a nonphysical wide slab filling the domain). The last `margin`
+        length units of the box must sit within `far_tol` of the reservoir on both species
+        — the FD analogue of solve_bvp's exact far-field BC (which instead blew max_nodes on
+        an over-wide film; the fixed grid happily returns garbage, so we reject explicitly)."""
+        N = self.N
+        p1 = U[:N]
+        p2 = U[N:]
+        if p1.min() < -1e-6 or p2.min() < -1e-6 or (p1 + p2).max() > 1.0 + 1e-6:
+            return False
+        tail = self.z >= (self.L - margin)
+        if (np.abs(p1[tail] - res[0]).max() > far_tol
+                or np.abs(p2[tail] - res[1]).max() > far_tol):
+            return False
+        return True
+
     def gamma(self, U, res):
         """Excess surface free energy: INT_0^L [W + (1/2) sum kappa_i (dphi_i/dz)^2] dz
         + f_surf(phi(0)). Trapezoid on the fixed grid (our thermo.W / f_surf)."""
@@ -171,17 +188,32 @@ class FDSolver:
                          U=U.copy())
 
 
-def guess_plateau(res, wall, N, film, L):
-    """Initial (2N,) guess: a wall PLATEAU of composition `wall`=(w1,w2) sustained over a
-    film of thickness `film`, then a smooth drop to the reservoir `res` — the shape a thick
-    surface film takes. A large `film` seeds the thick basin; a small `film` the thin basin.
-    Uses a tanh shoulder so the guess is smooth (helps Newton)."""
+def guess_enrich(res, surf, N, L, mode):
+    """Initial (2N,) guess: a MODEST wall enrichment decaying linearly to the reservoir,
+    phi_i(z) = phi_i_inf + sign_i * amp_i * (1 - z/L), with amp small for the thin basin and
+    larger for the thick basin (reference magnitudes: thin 0.015/0.004, thick 0.09/0.02).
+
+    Why modest, not a plateau: the thick surface state is a bounded wall enrichment, and at
+    the high-phi1 start of the backward scan it is a robust, shallow bump. A small tilt from
+    the reservoir toward that bump starts INSIDE the thick Newton basin. A full plateau
+    (wall jumped to ~0.9) overshoots past the middle-state barrier, and damped Newton relaxes
+    it monotonically back into the nearest (thin) basin — which is the seeding bug this fixes.
+
+    sign_i follows the wall preference: omega_i<0 attracts species i to the wall (enrich,
+    +), omega_i>=0 depletes (-). Positive enrichment is scaled to stay 20% off the simplex
+    boundary so the first high-phi1 thick point does not seed outside the simplex and fail."""
     z = np.linspace(0.0, L, N)
-    res = np.asarray(res, float)
-    wall = np.asarray(wall, float)
-    edge = 0.5 * (1.0 - np.tanh((z - film) / max(0.5, 0.15 * L)))   # 1 at wall -> 0 far
-    p1 = res[0] + (wall[0] - res[0]) * edge
-    p2 = res[1] + (wall[1] - res[1]) * edge
+    layer = 1.0 - z / L
+    r1, r2 = float(res[0]), float(res[1])
+    amp1, amp2 = (0.09, 0.02) if mode == "thick" else (0.015, 0.004)
+    s1 = -1.0 if surf.w1 < 0.0 else 1.0
+    s2 = -1.0 if surf.w2 < 0.0 else 1.0
+    d1, d2 = s1 * amp1, s2 * amp2
+    budget = max(1e-12, 1.0 - r1 - r2)
+    pos = max(0.0, d1) + max(0.0, d2)
+    scale = min(1.0, 0.8 * budget / pos) if pos > 0.0 else 1.0
+    p1 = r1 + d1 * scale * layer
+    p2 = r2 + d2 * scale * layer
     p1 = np.clip(p1, _EPS, 1.0 - 2.0 * _EPS)
     p2 = np.clip(p2, _EPS, 1.0 - p1 - _EPS)
     return np.concatenate([p1, p2])
