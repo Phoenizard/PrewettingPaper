@@ -39,6 +39,7 @@ import thermo as T  # noqa: E402
 import verify as V  # noqa: E402
 
 KAPPA = T.Kappa(1.0, 1.0)
+_trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))  # numpy>=2 renamed trapz
 
 
 def gamma_and_L(chi, surf, res, phi0, npath=4000):
@@ -65,8 +66,8 @@ def gamma_and_L(chi, surf, res, phi0, npath=4000):
     # is seglen, and the local inverse-gradient is sqrt(kappa_eff)/sqrt(2 W) per unit t:
     with np.errstate(divide="ignore"):
         integ_L = np.where(Wv > 1e-12, np.sqrt(kappa_eff) / np.sqrt(2.0 * Wv), 0.0)
-    gamma = T.f_surf(phi0[0], phi0[1], surf) + np.trapz(integ_g, t)
-    L = np.trapz(integ_L, t)
+    gamma = T.f_surf(phi0[0], phi0[1], surf) + _trapz(integ_g, t)
+    L = _trapz(integ_L, t)
     return float(L), float(gamma)
 
 
