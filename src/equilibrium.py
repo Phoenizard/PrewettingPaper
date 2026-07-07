@@ -244,15 +244,27 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
 # merge. Reuses solve_profile(warm=...) and Profile.sol_x/sol_y.
 # ---------------------------------------------------------------------------
 
-def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, L_grow=(1.0, 2.0, 3.5)):
-    """Warm-solve one branch; if it fails to converge, retry on a LARGER domain (the
-    thick branch's interface widens as phi2 -> 0 and gets truncated by a fixed L=12,
-    causing solve_bvp to fail). n is scaled with L so the mesh density near the wall is
-    preserved. Returns the first converged Profile, or None if all domains fail."""
+def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, L_grow=(2.0, 3.5)):
+    """Warm-solve one branch; if it fails, retry WITHOUT the warm start on a larger domain.
+
+    The thick branch's interface widens as phi2 -> 0 and gets truncated by the fixed
+    L=12, so solve_bvp fails. Simply resampling the warm profile onto the larger L does
+    not help: the warm mesh only covers [0, 12], so beyond 12 np.interp pads a flat
+    (wrong) tail — a bad guess. Instead we drop the warm start and rebuild a clean
+    wall->reservoir decaying guess (_guess) on the larger domain, seeded from the warm
+    profile's WALL composition (the one piece of the warm state that is still valid).
+    n is scaled with L to keep the near-wall mesh density. Returns the first converged
+    Profile, or None if every attempt fails."""
+    p = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm)
+    if p is not None:
+        return p
+    wall_seed = None
+    if warm is not None:
+        _, wy = warm
+        wall_seed = (float(wy[0][0]), float(wy[1][0]))  # wall (phi1, phi2) of the branch
     for k in L_grow:
-        Lk = L * k
-        nk = n if k == 1.0 else int(round(n * k))
-        p = solve_profile(chi, res, surf, kappa, L=Lk, n=nk, warm=warm)
+        Lk, nk = L * k, int(round(n * k))
+        p = solve_profile(chi, res, surf, kappa, seed=wall_seed, L=Lk, n=nk)
         if p is not None:
             return p
     return None
