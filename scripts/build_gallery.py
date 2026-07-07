@@ -1,15 +1,17 @@
 #!/usr/bin/env python
-"""Build a static, offline HTML gallery of our results vs the result/ reference.
+"""Build a static HTML gallery of our results vs the result/ reference.
 
 Reads $RESULTS_DB/verify (ours, synced from the server) and pairs each case with
-result/ (theirs, the local reference). Writes $RESULTS_DB/index.html — open it in
-a browser (no server needed): pick chi(stage) / om / chibb to see the two figures
-side by side, plus the pw_line.csv path (the data itself is not rendered).
+result/ (theirs, the local reference). Writes $RESULTS_DB/index.html — serve it with
+a local http server (browsers block file:// images outside the page's own directory,
+so double-clicking the file fails to load the result/ figures):
 
   RESULTS_DB=./database conda run -n numenv python scripts/build_gallery.py
+  bash scripts/serve_gallery.sh          # -> http://localhost:8000
 
-Paths in the HTML are absolute file:// URLs, so it works even when the database
-lives on an external drive while result/ stays on the Mac.
+Pick chi(stage) / om / chibb to see the two figures side by side, plus the pw_line.csv
+path (data not rendered). Image src are RELATIVE (verify/... and result/... via an
+in-DB symlink), so the http server serves both even if the DB is on an external drive.
 """
 import csv
 import json
@@ -24,10 +26,6 @@ import cases  # noqa: E402
 
 RESULTS_DB = os.path.abspath(os.environ.get("RESULTS_DB", os.path.join(ROOT, "database")))
 VERIFY = os.path.join(RESULTS_DB, "verify")
-
-
-def _file_url(path):
-    return "file://" + path if os.path.exists(path) else None
 
 
 def _iter_db_cases():
@@ -72,17 +70,20 @@ def build():
     catalog = []
     for rel in sorted(_iter_db_cases()):
         _, surf = cases.parse_case(*rel)
-        ours = os.path.join(VERIFY, *rel, "overlay.png")
-        # via the in-DB symlink so the URL stays inside the gallery tree
-        theirs = os.path.abspath(cases.result_overlay(rel, root=RESULTS_DB))
+        relpath = "/".join(rel)
+        ours_abs = os.path.join(VERIFY, *rel, "overlay.png")
+        theirs_abs = os.path.abspath(cases.result_overlay(rel, root=RESULTS_DB))  # via symlink
         meta = summ.get(rel, {})
         catalog.append({
             "chi": rel[0], "om": rel[1], "chibb": rel[2],
             "om1": surf.w1, "om2": surf.w2,
             "cbb1": surf.cbb1, "cbb2": surf.cbb2, "cbb12": surf.cbb12,
             "n_pw": meta.get("n_pw", ""), "status": meta.get("status", ""),
-            "ours": _file_url(ours),
-            "theirs": _file_url(theirs),
+            # RELATIVE urls (index.html sits at RESULTS_DB root); served by a local
+            # http server so the browser has no file:// restriction. result/ resolves
+            # through the in-DB symlink.
+            "ours": f"verify/{relpath}/overlay.png" if os.path.exists(ours_abs) else None,
+            "theirs": f"result/{relpath}/overlay_omega1_omega2.png" if os.path.exists(theirs_abs) else None,
             "data": os.path.join(VERIFY, *rel, "pw_line.csv"),
         })
     out_path = os.path.join(RESULTS_DB, "index.html")
@@ -91,6 +92,7 @@ def build():
         f.write(_HTML.replace("/*CATALOG*/", json.dumps(catalog)))
     n_theirs = sum(1 for c in catalog if c["theirs"])
     print(f"wrote {out_path}  ({len(catalog)} cases, {n_theirs} with result/ reference)")
+    print("serve it:  bash scripts/serve_gallery.sh   ->  http://localhost:8000")
 
 
 _HTML = r"""<!doctype html>
