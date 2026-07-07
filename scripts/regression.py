@@ -62,7 +62,8 @@ def check_case(rel, tol):
     saved = _load_pw(pw_csv)
     chi, surf = cases.parse_case(*rel)
     binodal = B.binodal_from_hull(chi)
-    new = verify.prewetting_line(chi, surf, binodal)  # in memory; no writes
+    new = verify.prewetting_line(chi, surf, binodal,  # in memory; no writes
+                                 progress="/".join(rel))
     max_dev, unmatched = _deviation(new, saved)
     ok = (max_dev <= tol) and (unmatched == 0)
     print(f"[{'PASS' if ok else 'FAIL'}] {'/'.join(rel)}  "

@@ -48,7 +48,7 @@ def main(argv):
     chi, surf = cases.parse_case(*rel)
     binodal = B.binodal_from_hull(chi)
     t0 = time.perf_counter()
-    pw = verify.prewetting_line(chi, surf, binodal)
+    pw = verify.prewetting_line(chi, surf, binodal, progress="bench")
     dt = time.perf_counter() - t0
 
     print(f"case             {'/'.join(rel)}")

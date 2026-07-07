@@ -21,6 +21,7 @@ Usage:
 import csv
 import os
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -52,11 +53,21 @@ def _branches(binodal):
     return f_left, f_right, apex_phi2
 
 
-def prewetting_line(chi, surf, binodal):
-    """(phi1*, phi2) points where gamma_thin = gamma_thick, scanning the dilute flank."""
+def prewetting_line(chi, surf, binodal, progress=None):
+    """(phi1*, phi2) points where gamma_thin = gamma_thick, scanning the dilute flank.
+
+    progress: None -> silent (production/parallel workers). Truthy -> emit one
+    progress line per phi2 sweep to stderr (index/total, cumulative pw points and
+    find_states calls, elapsed seconds); a string is used as a line prefix/label.
+    """
     f_left, f_right, apex_phi2 = _branches(binodal)
+    phi2_vals = np.arange(0.01, 0.85 * apex_phi2, 0.01)
+    total = len(phi2_vals)
+    tag = progress if isinstance(progress, str) else "pw"
+    t0 = time.perf_counter()
+    n_calls = 0
     pw = []
-    for phi2 in np.arange(0.01, 0.85 * apex_phi2, 0.01):
+    for i, phi2 in enumerate(phi2_vals):
         bl = f_left(phi2)
         dense = [(f_right(phi2), phi2), (0.97 * f_right(phi2), phi2)]
         grid = bl + np.arange(-0.03, 0.012, 0.0025)
@@ -66,6 +77,7 @@ def prewetting_line(chi, surf, binodal):
         for phi1 in grid:
             st = E.find_states(chi, (phi1, phi2), surf, KAPPA,
                                dense_seeds=dense, warm=prev_states)
+            n_calls += 1
             if len(st) >= 2:
                 prev_states = ((st[0].sol_x, st[0].sol_y),
                                (st[-1].sol_x, st[-1].sol_y))
@@ -78,6 +90,12 @@ def prewetting_line(chi, surf, binodal):
             else:
                 prev = None
                 prev_states = None
+        if progress:
+            el = time.perf_counter() - t0
+            eta = el / (i + 1) * (total - i - 1)
+            print(f"[{tag}] phi2 {i + 1}/{total} ({phi2:.3f})  pw={len(pw)}  "
+                  f"find_states={n_calls}  elapsed={el:.0f}s  eta={eta:.0f}s",
+                  file=sys.stderr, flush=True)
     return np.array(pw)
 
 
