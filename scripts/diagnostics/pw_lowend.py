@@ -113,6 +113,15 @@ def _thick_autopsy(chi, phi2, surf, warm_thick, phi1):
     for w in (6.0, 12.0):
         r = _solve_profile_why(chi, res, surf, seed=wall_seed, L=42.0, n=1050, w=w)
         print(f"    [autopsy] guess@L=42 w={w:.0f} -> {r[0]}: {r[1:]}", flush=True)
+    # DECISIVE: warm@L=12 succeeded at the predictor guess but production judged thick=None,
+    # so the secant must have probed a phi1 where the thick branch (via warm@L=12) fails.
+    # Scan phi1 around the guess at THIS phi2, calling the production track_branches path,
+    # and report thin/thick None-status + wall phi + why (nonconv/reject) for the thick.
+    print(f"    [autopsy] phi1 scan at phi2={phi2:.4f} (thick via warm@L=12):", flush=True)
+    for phi1s in np.arange(phi1 - 0.004, phi1 + 0.0041, 0.0005):
+        why = _solve_profile_why(chi, (float(phi1s), phi2), surf, warm=warm_thick,
+                                 L=12.0, n=300)
+        print(f"      phi1={phi1s:.4f}  thick warm@L=12 -> {why[0]}: {why[1:]}", flush=True)
 
 
 def _pw_point_diag(chi, phi2, surf, warm_thin, warm_thick, phi1_guess,
