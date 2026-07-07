@@ -244,30 +244,29 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
 # merge. Reuses solve_profile(warm=...) and Profile.sol_x/sol_y.
 # ---------------------------------------------------------------------------
 
-def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, L_grow=(2.0, 3.5)):
-    """Warm-solve one branch; if it fails, retry WITHOUT the warm start on a larger domain.
+def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, dense_seeds=None):
+    """Warm-solve one branch; if the warm start fails, fall back to a COLD multi-start
+    (find_states) and pick the state whose wall phi1 is closest to the warm branch.
 
-    The thick branch's interface widens as phi2 -> 0 and gets truncated by the fixed
-    L=12, so solve_bvp fails. Simply resampling the warm profile onto the larger L does
-    not help: the warm mesh only covers [0, 12], so beyond 12 np.interp pads a flat
-    (wrong) tail — a bad guess. Instead we drop the warm start and rebuild a clean
-    wall->reservoir decaying guess (_guess) on the larger domain, seeded from the warm
-    profile's WALL composition (the one piece of the warm state that is still valid).
-    n is scaled with L to keep the near-wall mesh density. Returns the first converged
-    Profile, or None if every attempt fails."""
+    Diagnosed root cause (om2=-0.40, phi2≈0.026): the thick branch's wall composition
+    jumps sharply along the line (e.g. wall phi1 0.92 -> 0.67 over a tiny phi2/phi1 step
+    near the surface-critical region). A warm start anchored on the old wall value (0.92)
+    cannot follow the jump — solve_bvp chases a solution that isn't there and blows past
+    max_nodes. A cold multi-start (find_states, dense_seeds) is NOT anchored and still
+    finds both branches; we then pick the one closest to the warm branch to stay on it.
+    (Growing L was the wrong fix: the film is narrow ~4, and larger L only exhausts
+    max_nodes faster.) Returns a Profile or None."""
     p = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm)
     if p is not None:
         return p
-    wall_seed = None
-    if warm is not None:
-        _, wy = warm
-        wall_seed = (float(wy[0][0]), float(wy[1][0]))  # wall (phi1, phi2) of the branch
-    for k in L_grow:
-        Lk, nk = L * k, int(round(n * k))
-        p = solve_profile(chi, res, surf, kappa, seed=wall_seed, L=Lk, n=nk)
-        if p is not None:
-            return p
-    return None
+    if warm is None:
+        return None
+    _, wy = warm
+    wall_phi1 = float(wy[0][0])  # the branch we were tracking, by wall phi1
+    cold = find_states(chi, res, surf, kappa, dense_seeds=dense_seeds, L=L, n=n)
+    if not cold:
+        return None
+    return min(cold, key=lambda s: abs(float(s.phi[0][0]) - wall_phi1))
 
 
 def track_branches(chi, res, surf, kappa, warm_thin, warm_thick, L=12.0, n=300):
