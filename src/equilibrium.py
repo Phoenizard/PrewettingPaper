@@ -21,6 +21,13 @@ from scipy.integrate import solve_bvp, simpson
 
 import thermo as T
 
+# Optimization toggles (see doc/plan). Both default on; flip off to bisect a
+# regression. USE_ANALYTIC_JAC feeds solve_bvp the exact Jacobian (same equations,
+# faster/steadier Newton). USE_WARM_START reuses a neighbour's converged profile
+# as the initial guess, with a guard + cold-multistart fallback.
+USE_ANALYTIC_JAC = True
+USE_WARM_START = True
+
 
 @dataclass
 class Profile:
@@ -29,11 +36,27 @@ class Profile:
     gamma: float             # excess surface free energy
     ok: bool                 # solver converged
     kind: str                # 'thin' or 'thick'
+    sol_x: np.ndarray = None  # raw solver mesh (for warm-starting the next point)
+    sol_y: np.ndarray = None  # raw solver state (4, len(sol_x))
 
 
-def _rhs(z, y, chi, res, kappa):
-    dW1, dW2 = T.dW(y[0], y[1], chi, res)
+def _rhs(z, y, chi, res, kappa, res_mu=None):
+    dW1, dW2 = T.dW(y[0], y[1], chi, res, res_mu=res_mu)
     return np.vstack([y[2], y[3], dW1 / kappa.k1, dW2 / kappa.k2])
+
+
+def _fun_jac(z, y, chi, kappa):
+    """d(rhs)/dy, shape (4, 4, m). d(dW_i)/dphi_j = hessian_fb (res-independent)."""
+    f11, f12, f22 = T.hessian_fb(y[0], y[1], chi)
+    m = y.shape[1]
+    J = np.zeros((4, 4, m))
+    J[0, 2] = 1.0
+    J[1, 3] = 1.0
+    J[2, 0] = f11 / kappa.k1
+    J[2, 1] = f12 / kappa.k1
+    J[3, 0] = f12 / kappa.k2
+    J[3, 1] = f22 / kappa.k2
+    return J
 
 
 def _bc(ya, yb, chi, res, surf, kappa):
@@ -44,6 +67,21 @@ def _bc(ya, yb, chi, res, surf, kappa):
         yb[0] - res[0],
         yb[1] - res[1],
     ])
+
+
+def _bc_jac(ya, yb, surf, kappa):
+    """(d bc/d ya, d bc/d yb), each (4, 4). All entries constant (df_surf linear)."""
+    Ja = np.zeros((4, 4))
+    Jb = np.zeros((4, 4))
+    Ja[0, 0] = -2.0 * surf.cbb1
+    Ja[0, 1] = -surf.cbb12
+    Ja[0, 2] = kappa.k1
+    Ja[1, 0] = -surf.cbb12
+    Ja[1, 1] = -2.0 * surf.cbb2
+    Ja[1, 3] = kappa.k2
+    Jb[2, 0] = 1.0
+    Jb[3, 1] = 1.0
+    return Ja, Jb
 
 
 def _guess(res, seed, w, x):
@@ -59,23 +97,35 @@ def _guess(res, seed, w, x):
     return y
 
 
-def _gamma(sol, chi, res, surf, kappa, L, n_quad=801):
+def _gamma(sol, chi, res, surf, kappa, L, n_quad=801, res_mu=None, res_fb=None):
     z = np.linspace(0.0, L, n_quad)
     y = sol.sol(z)
-    Wv = T.W(y[0], y[1], chi, res)
+    Wv = T.W(y[0], y[1], chi, res, res_mu=res_mu, res_fb=res_fb)
     grad = 0.5 * kappa.k1 * y[2] ** 2 + 0.5 * kappa.k2 * y[3] ** 2
     bulk = simpson(Wv + grad, x=z)
     return float(bulk + T.f_surf(y[0][0], y[1][0], surf))
 
 
-def solve_profile(chi, res, surf, kappa, seed, w=2.0, L=12.0, n=300):
-    """Solve one profile whose wall value is seeded near `seed` (target phi0)."""
-    x = np.linspace(0.0, L, n)
-    y0 = _guess(res, seed, w, x)
+def solve_profile(chi, res, surf, kappa, seed=None, w=2.0, L=12.0, n=300,
+                  res_mu=None, res_fb=None, warm=None):
+    """Solve one profile. Initial guess is either a wall->reservoir decay seeded
+    near `seed` (target phi0), or, when `warm=(x, y)` is given, a neighbouring
+    converged solution (resampled onto n nodes if its mesh grew large)."""
+    if warm is not None:
+        x, y0 = warm
+        if x.size > 2000:
+            xs = np.linspace(0.0, L, n)
+            y0 = np.vstack([np.interp(xs, x, y0[i]) for i in range(4)])
+            x = xs
+    else:
+        x = np.linspace(0.0, L, n)
+        y0 = _guess(res, seed, w, x)
+    fun_jac = (lambda z, y: _fun_jac(z, y, chi, kappa)) if USE_ANALYTIC_JAC else None
+    bc_jac = (lambda ya, yb: _bc_jac(ya, yb, surf, kappa)) if USE_ANALYTIC_JAC else None
     sol = solve_bvp(
-        lambda z, y: _rhs(z, y, chi, res, kappa),
+        lambda z, y: _rhs(z, y, chi, res, kappa, res_mu),
         lambda ya, yb: _bc(ya, yb, chi, res, surf, kappa),
-        x, y0, tol=1e-8, max_nodes=30000,
+        x, y0, fun_jac=fun_jac, bc_jac=bc_jac, tol=1e-8, max_nodes=30000,
     )
     if not sol.success:
         return None
@@ -83,19 +133,61 @@ def solve_profile(chi, res, surf, kappa, seed, w=2.0, L=12.0, n=300):
     y = sol.sol(zf)
     if y[0].min() < -1e-3 or y[1].min() < -1e-3 or (y[0] + y[1]).max() > 1.0:
         return None
-    gm = _gamma(sol, chi, res, surf, kappa, L)
-    return Profile(z=zf, phi=y[:2], gamma=float(gm), ok=True, kind="?")
+    gm = _gamma(sol, chi, res, surf, kappa, L, res_mu=res_mu, res_fb=res_fb)
+    return Profile(z=zf, phi=y[:2], gamma=float(gm), ok=True, kind="?",
+                   sol_x=sol.x, sol_y=sol.y)
 
 
-def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300):
+def _distinct(profiles):
+    """Keep profiles with distinct wall composition (phi1(0), phi2(0))."""
+    out = []
+    for p in profiles:
+        phi0 = (p.phi[0][0], p.phi[1][0])
+        if all(np.hypot(phi0[0] - q.phi[0][0], phi0[1] - q.phi[1][0]) > 5e-3
+               for q in out):
+            out.append(p)
+    return out
+
+
+def _warm_ok(states, warm, band=0.05):
+    """Accept a warm-started result only if it reproduces two distinct, correctly
+    ordered branches that stayed close (wall phi1 within `band`) to last point's."""
+    if len(states) != 2:
+        return False
+    states = sorted(states, key=lambda q: q.phi[0][0])
+    if states[1].phi[0][0] - states[0].phi[0][0] <= 5e-3:
+        return False
+    prev_thin_phi1 = warm[0][1][0][0]   # warm[0]=(x,y); y[0]=phi1 row; [0]=wall node
+    prev_thick_phi1 = warm[1][1][0][0]
+    return (abs(states[0].phi[0][0] - prev_thin_phi1) <= band
+            and abs(states[1].phi[0][0] - prev_thick_phi1) <= band)
+
+
+def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=None):
     """All distinct surface states for reservoir res, via targeted multi-start.
 
     Seeds: flat (thin basin) + wall-plateau targets in the dense basin. Pass
     `dense_seeds` (list of target phi0 near the dense coexisting phase, e.g. from
     the binodal) for a general topology; default targets suit T-a (phi1-rich).
     Returns states sorted by phi1(0) ascending: first = thinnest, last = thickest.
+
+    `warm=(thin_state, thick_state)` (each an (x, y) from the previous point) tries
+    two targeted warm-started solves first; the result is used only if it passes
+    `_warm_ok`, otherwise we fall back to the full cold multi-start (== old path).
     """
     res = np.asarray(res, dtype=float)
+    m1i, m2i, fbi = T.reservoir_potentials(res, chi)
+    res_mu = (m1i, m2i)
+
+    if USE_WARM_START and warm is not None:
+        cand = [solve_profile(chi, res, surf, kappa, L=L, n=n,
+                              res_mu=res_mu, res_fb=fbi, warm=w) for w in warm]
+        acc = _distinct([p for p in cand if p is not None])
+        if _warm_ok(acc, warm):
+            acc.sort(key=lambda q: q.phi[0][0])
+            return acc
+        # guard failed -> cold multi-start below
+
     if dense_seeds is None:
         dense_seeds = [(0.85, res[1]), (0.90, res[1]), (0.92, res[1] + 0.02)]
     seeds = [(res[0], res[1])] + list(dense_seeds)
@@ -103,7 +195,8 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300):
     found = []
     for s in seeds:
         for w in widths:
-            p = solve_profile(chi, res, surf, kappa, s, w=w, L=L, n=n)
+            p = solve_profile(chi, res, surf, kappa, s, w=w, L=L, n=n,
+                              res_mu=res_mu, res_fb=fbi)
             if p is None:
                 continue
             phi0 = (p.phi[0][0], p.phi[1][0])

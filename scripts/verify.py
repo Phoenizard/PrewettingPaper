@@ -62,9 +62,13 @@ def prewetting_line(chi, surf, binodal):
         grid = bl + np.arange(-0.03, 0.012, 0.0025)
         grid = grid[grid > 1e-3]
         prev = None
+        prev_states = None  # (thin, thick) raw solver states from the last phi1
         for phi1 in grid:
-            st = E.find_states(chi, (phi1, phi2), surf, KAPPA, dense_seeds=dense)
+            st = E.find_states(chi, (phi1, phi2), surf, KAPPA,
+                               dense_seeds=dense, warm=prev_states)
             if len(st) >= 2:
+                prev_states = ((st[0].sol_x, st[0].sol_y),
+                               (st[-1].sol_x, st[-1].sol_y))
                 d = st[0].gamma - st[-1].gamma
                 if prev is not None and prev[1] * d < 0:
                     p0, d0 = prev
@@ -73,6 +77,7 @@ def prewetting_line(chi, surf, binodal):
                 prev = (phi1, d)
             else:
                 prev = None
+                prev_states = None
     return np.array(pw)
 
 

@@ -86,23 +86,41 @@ def spinodal_det(phi1, phi2, chi: Chi):
     return f11 * f22 - f12 * f12
 
 
-def W(phi1, phi2, chi: Chi, res):
+def reservoir_potentials(res, chi: Chi):
+    """(mu1_inf, mu2_inf, f_b_inf) at the reservoir — precompute once and pass to
+    dW/W as res_mu/res_fb to avoid recomputing them on every profile evaluation."""
+    m1i, m2i = mu(res[0], res[1], chi)
+    fbi = f_b(res[0], res[1], chi)
+    return m1i, m2i, fbi
+
+
+def W(phi1, phi2, chi: Chi, res, res_mu=None, res_fb=None):
     """Grand-potential density relative to reservoir res=(phi1_inf, phi2_inf).
 
     W = f_b(phi) - f_b(res) - mu1_inf*(phi1-phi1_inf) - mu2_inf*(phi2-phi2_inf)
     i.e. the vertical distance of f_b above its tangent plane at the reservoir.
     W(res) = 0 and W is a local minimum there.
+
+    res_mu=(mu1_inf, mu2_inf) and res_fb=f_b(res) may be supplied precomputed;
+    default None recomputes them (identical float64 result).
     """
     r1, r2 = res
-    m1i, m2i = mu(r1, r2, chi)
-    fbi = f_b(r1, r2, chi)
-    return f_b(phi1, phi2, chi) - fbi - m1i * (phi1 - r1) - m2i * (phi2 - r2)
+    if res_mu is None:
+        res_mu = mu(r1, r2, chi)
+    if res_fb is None:
+        res_fb = f_b(r1, r2, chi)
+    m1i, m2i = res_mu
+    return f_b(phi1, phi2, chi) - res_fb - m1i * (phi1 - r1) - m2i * (phi2 - r2)
 
 
-def dW(phi1, phi2, chi: Chi, res):
-    """(dW/dphi1, dW/dphi2) = (mu1(phi) - mu1_inf, mu2(phi) - mu2_inf)."""
-    r1, r2 = res
-    m1i, m2i = mu(r1, r2, chi)
+def dW(phi1, phi2, chi: Chi, res, res_mu=None):
+    """(dW/dphi1, dW/dphi2) = (mu1(phi) - mu1_inf, mu2(phi) - mu2_inf).
+
+    res_mu=(mu1_inf, mu2_inf) may be supplied precomputed; default None recomputes.
+    """
+    if res_mu is None:
+        res_mu = mu(res[0], res[1], chi)
+    m1i, m2i = res_mu
     m1, m2 = mu(phi1, phi2, chi)
     return m1 - m1i, m2 - m2i
 
