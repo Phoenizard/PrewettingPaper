@@ -53,15 +53,19 @@ def _branches(binodal):
     return f_left, f_right, apex_phi2
 
 
-def prewetting_line(chi, surf, binodal, progress=None):
+def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
     """(phi1*, phi2) points where gamma_thin = gamma_thick, scanning the dilute flank.
 
     progress: None -> silent (production/parallel workers). Truthy -> emit one
     progress line per phi2 sweep to stderr (index/total, cumulative pw points and
     find_states calls, elapsed seconds); a string is used as a line prefix/label.
+    max_lines: cap the phi2 sweep to the first N lines (dry-run smoke test — a
+    short, partial run to prove the pipeline works; not a full result).
     """
     f_left, f_right, apex_phi2 = _branches(binodal)
     phi2_vals = np.arange(0.01, 0.85 * apex_phi2, 0.01)
+    if max_lines:
+        phi2_vals = phi2_vals[:max_lines]
     total = len(phi2_vals)
     tag = progress if isinstance(progress, str) else "pw"
     t0 = time.perf_counter()
@@ -125,7 +129,8 @@ def verify_case(rel, chi, surf, skip_existing=False):
     os.makedirs(out_dir, exist_ok=True)
     binodal = B.binodal_from_hull(chi)
     prog = "/".join(rel) if os.environ.get("VERIFY_PROGRESS") else None
-    pw = prewetting_line(chi, surf, binodal, progress=prog)
+    max_lines = int(os.environ.get("PW_MAX_PHI2", "0")) or None  # dry-run cap
+    pw = prewetting_line(chi, surf, binodal, progress=prog, max_lines=max_lines)
 
     np.savetxt(pw_csv, pw if len(pw) else np.empty((0, 2)),
                delimiter=",", header="phi1_inf,phi2_inf", comments="")
