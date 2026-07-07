@@ -230,3 +230,69 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
               raw=[[float(p0[0]), float(p0[1]), [float(s[0]), float(s[1])], float(w)]
                    for (p0, s, w) in raw])
     return found
+
+
+# ---------------------------------------------------------------------------
+# Pre-wetting line by branch continuation (project note 3.3).
+#
+# Multi-start find_states rediscovers the thin/thick branches independently at each
+# reservoir; near the ENDS of the pre-wetting line the two branches nearly merge and
+# multi-start can no longer separate them, so the line drops points. Continuation
+# instead TRACKS the two branches: from a converged (thin, thick) pair it warm-starts
+# both at a neighbouring reservoir, so each branch is followed rather than re-found.
+# This holds the pair apart down to the surface-critical terminus where they truly
+# merge. Reuses solve_profile(warm=...) and Profile.sol_x/sol_y.
+# ---------------------------------------------------------------------------
+
+def track_branches(chi, res, surf, kappa, warm_thin, warm_thick, L=12.0, n=300):
+    """Warm-solve the thin and thick branch at reservoir res from converged neighbours
+    `warm_thin`/`warm_thick` (each an (x, y) mesh+state). Either return may be None if
+    that branch failed to converge."""
+    thin = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm_thin)
+    thick = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm_thick)
+    return thin, thick
+
+
+def pw_point(chi, phi2, surf, kappa, warm_thin, warm_thick, phi1_guess,
+             L=12.0, n=300, merge_tol=3e-3, xtol=1e-6, max_it=40, h=3e-4):
+    """Corrector at fixed phi2: find phi1_inf where gamma_thin == gamma_thick, tracking
+    the two branches from warm starts via a secant root-find in phi1.
+
+    Returns (phi1_star, thin_profile, thick_profile), or None when the branches merge or
+    a branch collapses/fails to converge -- i.e. the pre-wetting line has terminated.
+    `merge_tol` is the wall-composition gap below which the pair counts as merged.
+    """
+    def g(phi1):
+        thin, thick = track_branches(chi, (phi1, phi2), surf, kappa,
+                                     warm_thin, warm_thick, L=L, n=n)
+        if thin is None or thick is None:
+            return None, thin, thick
+        # secant tracks each branch; if warm-thick collapsed onto thin (or they truly
+        # merged) the wall compositions coincide -> treat as terminus.
+        if abs(thin.phi[0][0] - thick.phi[0][0]) < merge_tol:
+            return None, thin, thick
+        return thin.gamma - thick.gamma, thin, thick
+
+    x0 = phi1_guess
+    g0, _, _ = g(x0)
+    if g0 is None:
+        return None
+    x1 = phi1_guess + h
+    g1, thin1, thick1 = g(x1)
+    if g1 is None:
+        return None
+    for _ in range(max_it):
+        if g1 == g0:
+            break
+        x2 = x1 - g1 * (x1 - x0) / (g1 - g0)
+        step = x2 - x1
+        if abs(step) > 0.02:           # damp runaway secant jumps
+            x2 = x1 + (0.02 if step > 0 else -0.02)
+        g2, thin2, thick2 = g(x2)
+        if g2 is None:
+            return None
+        x0, g0 = x1, g1
+        x1, g1, thin1, thick1 = x2, g2, thin2, thick2
+        if abs(x1 - x0) < xtol:
+            return x1, thin1, thick1
+    return None
