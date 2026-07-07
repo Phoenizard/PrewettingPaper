@@ -39,11 +39,6 @@ SUMMARY = os.path.join(ROOT, "out", "verify", "SUMMARY.csv")
 SUMMARY_COLS = ["chi_dir", "om_dir", "chibb_dir", "n_pw",
                 "phi1_min", "phi1_max", "phi2_min", "phi2_max", "status"]
 
-# Scan the dilute-flank phi2 up to this fraction of the binodal apex. The prewetting
-# line runs from near the binary limit (phi2->0) to the wetting transition just below
-# the apex; the old 0.85 cap truncated the high-phi2 end of the line.
-PHI2_HI_FRAC = 0.97
-
 
 def _diag(**kw):
     """Emit one [PWDIAG] JSONL line to stderr when PW_DIAG is set (diagnosis only,
@@ -66,34 +61,29 @@ def _branches(binodal):
     return f_left, f_right, apex_phi2
 
 
-def _scan_line(chi, surf, phi2, dense, grid, L, distinct_tol, diag_tag=None):
-    """Scan phi1 over `grid` at fixed phi2 for the thin/thick gamma crossing.
-
-    Returns (phi1_star, phi2) at the first sign change of d = gamma_thin - gamma_thick,
-    else None. Warm-starts within the line only (raw states from the previous phi1).
-    `n_calls` (find_states calls made) is stashed on the function for the caller's log.
-    With the production args (L=12, distinct_tol=5e-3, the default phi1 grid) this
-    reproduces the original inner loop byte-for-byte.
-    """
-    _scan_line.n_calls = 0
+def _seed_scan(chi, surf, phi2, f_left, f_right):
+    """Multi-start scan at fixed phi2; on the first thin/thick gamma sign change return
+    (phi1_star, thin_warm, thick_warm, sep), else None. Only used to SEED the
+    continuation with one well-separated point on the line (its converged thin/thick
+    profiles), not to trace the whole line."""
+    bl = f_left(phi2)
+    dense = [(f_right(phi2), phi2), (0.97 * f_right(phi2), phi2)]
+    grid = bl + np.arange(-0.03, 0.012, 0.0025)
+    grid = grid[grid > 1e-3]
     prev = None
-    prev_states = None  # (thin, thick) raw solver states from the last phi1
+    prev_states = None
     for phi1 in grid:
         st = E.find_states(chi, (phi1, phi2), surf, KAPPA, dense_seeds=dense,
-                           warm=prev_states, L=L, distinct_tol=distinct_tol)
-        _scan_line.n_calls += 1
-        if diag_tag is not None:
-            _diag(kind="scan", tag=diag_tag, phi2=float(phi2), phi1=float(phi1),
-                  n=len(st), d=(float(st[0].gamma - st[-1].gamma) if len(st) >= 2 else None),
-                  branches=[[float(s.phi[0][0]), float(s.phi[1][0]), float(s.gamma)]
-                            for s in st])
+                           warm=prev_states)
         if len(st) >= 2:
-            prev_states = ((st[0].sol_x, st[0].sol_y),
-                           (st[-1].sol_x, st[-1].sol_y))
+            prev_states = ((st[0].sol_x, st[0].sol_y), (st[-1].sol_x, st[-1].sol_y))
             d = st[0].gamma - st[-1].gamma
             if prev is not None and prev[1] * d < 0:
                 p0, d0 = prev
-                return (p0 + (phi1 - p0) * (0 - d0) / (d - d0), phi2)
+                phi1_star = p0 + (phi1 - p0) * (0 - d0) / (d - d0)
+                sep = abs(st[0].phi[0][0] - st[-1].phi[0][0])
+                return (phi1_star, (st[0].sol_x, st[0].sol_y),
+                        (st[-1].sol_x, st[-1].sol_y), sep)
             prev = (phi1, d)
         else:
             prev = None
@@ -101,62 +91,72 @@ def _scan_line(chi, surf, phi2, dense, grid, L, distinct_tol, diag_tag=None):
     return None
 
 
+def _continue(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.001,
+              phi2_ceiling=0.15, max_steps=80):
+    """March the PW line from seed=(phi2, phi1_star, thin_warm, thick_warm) in
+    `direction` (+1 up / -1 down), tracking the two branches with E.pw_point until they
+    merge (terminus) or we leave the dilute flank. Returns [(phi1_star, phi2)]."""
+    phi2_s, phi1_s, tw, kw = seed
+    out = []
+    p1_prev, p1_prev2 = phi1_s, None
+    phi2 = phi2_s
+    for _ in range(max_steps):
+        phi2n = round(phi2 + direction * dphi2, 10)
+        if phi2n <= phi2_floor or phi2n >= min(apex, phi2_ceiling):
+            break
+        guess = p1_prev if p1_prev2 is None else (2.0 * p1_prev - p1_prev2)
+        res = E.pw_point(chi, phi2n, surf, KAPPA, tw, kw, guess, max_it=20)
+        if res is None:
+            break  # branches merged / a branch collapsed -> line terminus
+        phi1_star, thin, thick = res
+        out.append((phi1_star, phi2n))
+        tw = (thin.sol_x, thin.sol_y)
+        kw = (thick.sol_x, thick.sol_y)
+        p1_prev2, p1_prev = p1_prev, phi1_star
+        phi2 = phi2n
+    return out
+
+
 def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
-    """(phi1*, phi2) points where gamma_thin = gamma_thick, scanning the dilute flank.
+    """(phi1*, phi2) pre-wetting points (gamma_thin == gamma_thick) along the dilute
+    flank, by branch CONTINUATION.
 
-    progress: None -> silent (production/parallel workers). Truthy -> emit one
-    progress line per phi2 sweep to stderr (index/total, cumulative pw points and
-    find_states calls, elapsed seconds); a string is used as a line prefix/label.
-    max_lines: cap the phi2 sweep to the first N lines (dry-run smoke test — a
-    short, partial run to prove the pipeline works; not a full result).
+    A short multi-start seed pass over a middle phi2 band finds a well-separated
+    thin/thick pair on the line; the continuation then tracks that pair outward in both
+    phi2 directions (equilibrium.pw_point) down toward the binary limit and up to the
+    surface-critical merge, so the line's endpoints — which per-line multi-start drops
+    where the two branches nearly coincide — are recovered.
 
-    Each phi2 line is scanned first with the production settings (default phi1 grid,
-    L=12, distinct_tol=5e-3); lines that resolve a crossing keep exactly the old
-    behaviour. Only lines the production scan leaves empty — the endpoints of the
-    prewetting line — get a second, sturdier pass (wider/finer phi1 grid, larger
-    domain L for a diverging thick film, smaller distinctness so a near-merged
-    thin/thick pair still counts as two branches). Because the fallback fires only
-    on otherwise-empty lines, recovered endpoints never perturb the middle points.
+    progress truthy -> one summary line to stderr. max_lines caps the seed band (a
+    dry-run smoke test; the continuation itself still traces the full line).
     """
-    f_left, f_right, apex_phi2 = _branches(binodal)
-    hi = PHI2_HI_FRAC * apex_phi2
-    phi2_vals = np.arange(0.01, hi, 0.01)
+    f_left, f_right, apex = _branches(binodal)
+    band = np.arange(0.03, min(0.09, 0.85 * apex), 0.01)
     if max_lines:
-        phi2_vals = phi2_vals[:max_lines]
-    total = len(phi2_vals)
-    tag = progress if isinstance(progress, str) else "pw"
-    diag = bool(os.environ.get("PW_DIAG"))
-    if diag:
-        ref = [round(0.01 * k, 2) for k in range(1, 10)]  # reference spans ~0.01..0.09
-        _diag(kind="range", apex_phi2=float(apex_phi2), hi=float(hi), lo=0.01, step=0.01,
-              scanned=[float(x) for x in phi2_vals],
-              ref_out_of_range=[x for x in ref if x < 0.01 or x > float(phi2_vals[-1])])
+        band = band[:max_lines]
     t0 = time.perf_counter()
-    n_calls = 0
-    pw = []
-    for i, phi2 in enumerate(phi2_vals):
-        bl = f_left(phi2)
-        dense = [(f_right(phi2), phi2), (0.97 * f_right(phi2), phi2)]
-        grid = bl + np.arange(-0.03, 0.012, 0.0025)
-        grid = grid[grid > 1e-3]
-        cr = _scan_line(chi, surf, phi2, dense, grid, L=12.0, distinct_tol=5e-3,
-                        diag_tag=(f"default:{phi2:.3f}" if diag else None))
-        n_calls += _scan_line.n_calls
-        if cr is None:
-            # Endpoint fallback (only for lines the production scan left empty).
-            wide = bl + np.arange(-0.05, 0.03, 0.002)
-            wide = wide[wide > 1e-3]
-            cr = _scan_line(chi, surf, phi2, dense, wide, L=24.0, distinct_tol=2e-3,
-                            diag_tag=(f"fallback:{phi2:.3f}" if diag else None))
-            n_calls += _scan_line.n_calls
-        if cr is not None:
-            pw.append(cr)
+    seeds = []
+    for phi2 in band:
+        r = _seed_scan(chi, surf, float(phi2), f_left, f_right)
+        if r:
+            phi1_star, tw, kw, sep = r
+            seeds.append((float(phi2), phi1_star, tw, kw, sep))
+    tag = progress if isinstance(progress, str) else "pw"
+    if not seeds:
         if progress:
-            el = time.perf_counter() - t0
-            eta = el / (i + 1) * (total - i - 1)
-            print(f"[{tag}] phi2 {i + 1}/{total} ({phi2:.3f})  pw={len(pw)}  "
-                  f"find_states={n_calls}  elapsed={el:.0f}s  eta={eta:.0f}s",
+            print(f"[{tag}] no seed on band {band[0]:.2f}..{band[-1]:.2f}",
                   file=sys.stderr, flush=True)
+        return np.array([])
+    best = max(seeds, key=lambda s: s[4])  # widest branch separation = sturdiest seed
+    seed = (best[0], best[1], best[2], best[3])
+    down = _continue(chi, surf, seed, apex, -1)
+    up = _continue(chi, surf, seed, apex, +1)
+    pw = sorted([(best[1], best[0])] + down + up, key=lambda p: p[1])
+    if progress:
+        el = time.perf_counter() - t0
+        print(f"[{tag}] seed@phi2={best[0]:.3f} sep={best[4]:.3f}  down+{len(down)} "
+              f"up+{len(up)}  n={len(pw)}  phi2=[{pw[0][1]:.3f},{pw[-1][1]:.3f}]  "
+              f"elapsed={el:.0f}s", file=sys.stderr, flush=True)
     return np.array(pw)
 
 
