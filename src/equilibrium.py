@@ -244,12 +244,26 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
 # merge. Reuses solve_profile(warm=...) and Profile.sol_x/sol_y.
 # ---------------------------------------------------------------------------
 
+def _solve_branch_adaptive(chi, res, surf, kappa, warm, L, n, L_grow=(1.0, 2.0, 3.5)):
+    """Warm-solve one branch; if it fails to converge, retry on a LARGER domain (the
+    thick branch's interface widens as phi2 -> 0 and gets truncated by a fixed L=12,
+    causing solve_bvp to fail). n is scaled with L so the mesh density near the wall is
+    preserved. Returns the first converged Profile, or None if all domains fail."""
+    for k in L_grow:
+        Lk = L * k
+        nk = n if k == 1.0 else int(round(n * k))
+        p = solve_profile(chi, res, surf, kappa, L=Lk, n=nk, warm=warm)
+        if p is not None:
+            return p
+    return None
+
+
 def track_branches(chi, res, surf, kappa, warm_thin, warm_thick, L=12.0, n=300):
     """Warm-solve the thin and thick branch at reservoir res from converged neighbours
     `warm_thin`/`warm_thick` (each an (x, y) mesh+state). Either return may be None if
-    that branch failed to converge."""
-    thin = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm_thin)
-    thick = solve_profile(chi, res, surf, kappa, L=L, n=n, warm=warm_thick)
+    that branch failed to converge even after growing the domain."""
+    thin = _solve_branch_adaptive(chi, res, surf, kappa, warm_thin, L, n)
+    thick = _solve_branch_adaptive(chi, res, surf, kappa, warm_thick, L, n)
     return thin, thick
 
 
