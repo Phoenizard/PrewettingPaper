@@ -4,6 +4,10 @@ result/
 # Generated verification outputs / diagnostics
 out/
 
+# Run logs (alongside out/) and throwaway/diagnostic scratch
+log/
+tmp/
+
 # Python / OS cruft
 __pycache__/
 *.pyc
