@@ -90,7 +90,7 @@ def _solve_profile_why(chi, res, surf, seed=None, w=2.0, L=12.0, n=300, warm=Non
     return ("ok", (y[0][0], y[1][0]), width)
 
 
-def _thick_autopsy(chi, phi2, surf, warm_thick, phi1):
+def _thick_autopsy(chi, phi2, surf, warm_thick, phi1, f_right_g):
     """At a failed (phi1, phi2), replay the thick branch's three attempts that
     _solve_branch_adaptive makes (warm@L=12, _guess@L=24, _guess@L=42) and print WHY each
     one is None (nonconv vs reject) or, if it converges, how wide the film is. This is the
@@ -135,6 +135,18 @@ def _thick_autopsy(chi, phi2, surf, warm_thick, phi1):
             why = _solve_profile_why(chi, (fail_phi1, phi2), surf, warm=warm_thick,
                                      L=12.0, n=300, tol=tol, max_nodes=mn)
             print(f"      tol={tol:.0e} max_nodes={mn} -> {why[0]}: {why[1:]}", flush=True)
+        # EXISTENCE test: warm keeps failing past phi1=0.0984 with runaway nodes, which
+        # looks like the thick branch VANISHING (surface spinodal) rather than a solver
+        # budget issue. Confirm from a COLD multi-start (find_states, no warm): does a
+        # distinct thick state exist at all here? If find_states returns only ONE state,
+        # the thick branch is physically gone -> the line truly terminates near phi2=0.026.
+        dense = [(f_right_g(phi2), phi2), (0.97 * f_right_g(phi2), phi2)]
+        for p1 in (float(phi1), fail_phi1, fail_phi1 + 0.002):
+            st = E.find_states(chi, (p1, phi2), surf, KAPPA, dense_seeds=dense)
+            walls = [(round(float(s.phi[0][0]), 4), round(float(s.phi[1][0]), 4))
+                     for s in st]
+            print(f"      cold find_states phi1={p1:.4f} -> n={len(st)} walls={walls}",
+                  flush=True)
 
 
 def _pw_point_diag(chi, phi2, surf, warm_thin, warm_thick, phi1_guess,
@@ -228,7 +240,7 @@ def main(argv):
             # Autopsy the THICK branch at the failing point: is it non-converging, being
             # rejected, or just too wide for L=12 — and does a longer guess length-scale
             # rescue it? (warm_k is the last accepted thick profile = the warm start used.)
-            _thick_autopsy(chi, phi2n, surf, warm_k, guess)
+            _thick_autopsy(chi, phi2n, surf, warm_k, guess, f_right)
             break
         # accept: chain warm starts and predictor
         phi1_star = float(info[1].split("=")[1])
