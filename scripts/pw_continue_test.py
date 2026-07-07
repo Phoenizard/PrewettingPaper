@@ -73,8 +73,8 @@ def seed_scan(chi, surf, phi2, f_left, f_right):
     return None
 
 
-def continue_dir(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.003,
-                 phi2_ceiling=0.15, max_steps=60):
+def continue_dir(chi, surf, seed, apex, direction, dphi2=0.005, phi2_floor=0.001,
+                 phi2_ceiling=0.15, max_steps=80):
     """March the PW line from `seed`=(phi2, phi1_star, thin_warm, thick_warm) in
     `direction` (+1 up / -1 down) until the branches merge or we leave the flank.
     Returns (points list [(phi1_star, phi2)], stop_reason, terminus_phi2)."""
