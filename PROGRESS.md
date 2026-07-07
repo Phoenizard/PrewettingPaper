@@ -22,6 +22,11 @@
 
 ## 下一步
 
+- [遗留问题, 暂不处理] pre-wetting 转变线两端漏点:画廊对比 case chi13=2.8 / om1=om2=-0.30 发现,
+  result 参考的 PW 线覆盖 phi2≈0–0.09(贴 binodal 左翼一整条),我们只得 phi2=0.03–0.06 四个点,两端都缺。
+  不是密度、也不是扫描范围问题(phi2 从 0.01 起步长 0.01,本就扫过 0.01/0.02/0.07/0.08/0.09,却没记到点)。
+  根因方向:两端每个 phi2 上 find_states/变号夹逼没抓到转变(可能没同时得到薄/厚两支,或 phi1 内层网格
+  没框住转变点)。属复核代码在 PW 线两端的检测缺陷,待后续查(先登记不改)。
 - [done] 10 基线验证通过（compare 10/10 ≤5e-13）→ 优化代码可用于全量。
 - 用优化代码跑全量 770（分批：产出 → 对比）：run_parallel.sh 走 result_cases.txt，产出到 out/verify；
   逐 chi 目录扩规模；每批先 dry-run、给矩阵等确认再上（见 doc/note/Workflow.md）。
@@ -62,6 +67,15 @@
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-07（夜：结果管理 + 画廊,发现 PW 线两端漏点）
+
+- 结果管理落地:scripts/pull_results.sh(rsync 服务器 out/verify → 本地 $RESULTS_DB/verify,并集 merge;
+  RESULTS_DB 可配置,默认 ./database,以后移动硬盘改路径即可)、build_gallery.py + serve_gallery.sh
+  (离线静态画廊,本地 http 服务;下拉选 chi/om/chibb → ours 与 result 并排 + pw_line.csv 路径)。
+  不用网盘(坚果云有存储/流量限制)。file:// 直开会因浏览器安全策略不显示 result 图,故走本地 http。
+- 用画廊肉眼比对,发现遗留问题(见「下一步」):我们的 PW 线两端漏点,只覆盖 phi2=0.03–0.06,
+  而 result 覆盖 phi2≈0–0.09。已登记,暂不处理。
 
 ### 2026-07-07（傍晚：验证优化不改结果 + 工作流成型）
 
