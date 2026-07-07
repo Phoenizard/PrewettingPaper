@@ -31,7 +31,8 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 import numpy as np  # noqa: E402
 import thermo as T  # noqa: E402
 import binodal as B  # noqa: E402
-import equilibrium as E  # noqa: E402
+import equilibrium as E  # noqa: E402  (dormant solve_bvp path; kept for diagnostics/oracle)
+import fdsolver as FD  # noqa: E402
 import cases  # noqa: E402
 
 KAPPA = T.Kappa(1.0, 1.0)
@@ -74,91 +75,53 @@ def _branches(binodal):
 # from finite neighbours, so losing a branch point no longer kills the line.
 #
 # This mirrors the reference implementation's _run_hysteresis_scan +
-# _extract_prewetting_crossings, re-implemented in our own code on solve_profile.
+# _extract_prewetting_crossings, re-implemented in our own code on the FD solver.
 # ---------------------------------------------------------------------------
 
-_trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))  # numpy>=2 renamed trapz
+
+def _fd_adsorption(solver, U, res):
+    """Total Gibbs adsorption cs = INT[(phi1-phi1_inf)+(phi2-phi2_inf)] dz on the FD grid."""
+    N = solver.N
+    return float(np.trapezoid((U[:N] - res[0]) + (U[N:] - res[1]), solver.z))
 
 
-def _adsorption(prof, res):
-    """Total Gibbs adsorption cs = INT[(phi1-phi1_inf) + (phi2-phi2_inf)] dz (film size)."""
-    return float(_trapz((prof.phi[0] - res[0]) + (prof.phi[1] - res[1]), prof.z))
-
-
-def _dense_fan(f_right, phi2):
-    """Multi-start wall targets across the phi1-rich flank (thin/middle/thick basins),
-    the 5-point fan validated in is_prewetting / pw_check_transition."""
-    fr = f_right(phi2)
-    return [(fr, phi2), (0.97 * fr, phi2), (0.9, phi2), (0.7, phi2), (0.5, phi2)]
-
-
-def _role_state(chi, res, surf, f_right, mode):
-    """find_states at res, return the role profile (st[0] thin / st[-1] thick) or None.
-    Requires >=2 states for the thick role (a lone state is the thin branch, not thick)."""
-    st = E.find_states(chi, res, surf, KAPPA, dense_seeds=_dense_fan(f_right, res[1]))
-    if not st:
-        return None
-    if mode == "thick" and len(st) < 2:
-        return None            # no distinct thick basin here
-    return st[0] if mode == "thin" else st[-1]
-
-
-def _branch_scan(chi, surf, fixed, scan_vals, axis, mode, f_right, progress=None,
-                 max_seed_tries=6):
-    """Build ONE surface branch along a reservoir scan by SEED-then-SPREAD.
+def _fd_branch_scan(solver, surf, fixed, scan_vals, axis, mode, progress=None):
+    """Build ONE surface branch along a reservoir scan with the fixed-grid FD solver,
+    warm-started point to point (no find_states, no solve_bvp).
 
     axis="phi1": fixed=phi2, scan_vals are phi1_inf. axis="phi2": fixed=phi1, scan phi2.
-    mode="thin" -> thinnest state (st[0]); mode="thick" -> thickest (st[-1]).
+    mode="thin"  scans scan_vals ASCENDING (thin basin, born at low phi1).
+    mode="thick" scans scan_vals DESCENDING (thick basin, born at HIGH phi1 — the phi1-rich
+                 corner where the thick film is the sole attractor — then warm-continued
+                 inward). This wide backward scan is what the reference does and is what makes
+                 the thick branch survive; a narrow window starting mid-range collapses to thin.
 
-    We first find a seed ANCHOR: cold-find states (validated dense fan) starting from the
-    high-phi1 / dense end and walking inward, until the role state exists (bounded by
-    max_seed_tries so we never grind through the no-state region). From that anchor we
-    warm-continue OUTWARD in both directions along scan_vals, each step warm-started from
-    the neighbour — cheap and follows the branch smoothly. A point that fails to warm-solve
-    ends that direction (the branch has left its region of existence). This calls the
-    expensive find_states O(1) times per branch, not per point. Returns (gamma[], cs[])
-    aligned to scan_vals ASCENDING, NaN where the branch is absent."""
+    The cold guess (guess_enrich) is applied ONCE at the first point of each branch; every
+    subsequent point warm-starts from the previous converged U. A point that fails to solve /
+    is rejected -> NaN, keep the previous warm U. Returns (gamma[], cs[]) aligned to scan_vals
+    ASCENDING (written by index, so iteration order is irrelevant to output order)."""
     n = len(scan_vals)
     gamma = [float("nan")] * n
     cs = [float("nan")] * n
-    # anchor search order: thick seeds best at high phi1 (dense end); thin at low phi1.
-    anchor_order = range(n - 1, -1, -1) if mode == "thick" else range(n)
-    anchor = None
-    tries = 0
-    for k in anchor_order:
-        if tries >= max_seed_tries:
-            break
-        tries += 1
-        res = (float(scan_vals[k]), fixed) if axis == "phi1" else (fixed, float(scan_vals[k]))
-        p = _role_state(chi, res, surf, f_right, mode)
-        if p is not None:
-            anchor = k
-            gamma[k] = p.gamma
-            cs[k] = _adsorption(p, res)
-            _log_scan(progress, axis, mode, fixed, scan_vals[k],
-                      f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f} (seed)")
-            warm0 = (p.sol_x, p.sol_y)
-            break
-        _log_scan(progress, axis, mode, fixed, scan_vals[k], "None (seed-try)")
-    if anchor is None:
-        return np.asarray(gamma), np.asarray(cs)
-
-    # spread outward from the anchor in both directions, warm-started each step
-    for direction in (+1, -1):
-        warm = warm0
-        k = anchor + direction
-        while 0 <= k < n:
-            res = (float(scan_vals[k]), fixed) if axis == "phi1" else (fixed, float(scan_vals[k]))
-            p = E.solve_profile(chi, res, surf, KAPPA, warm=warm)
-            if p is None:
-                _log_scan(progress, axis, mode, fixed, scan_vals[k], "None (edge)")
-                break            # branch left its region of existence this way
-            gamma[k] = p.gamma
-            cs[k] = _adsorption(p, res)
-            warm = (p.sol_x, p.sol_y)
-            _log_scan(progress, axis, mode, fixed, scan_vals[k],
-                      f"g={p.gamma:+.5f} cs={cs[k]:.3f} wall={p.phi[0][0]:.3f}")
-            k += direction
+    order = range(n) if mode == "thin" else range(n - 1, -1, -1)
+    U_guess = None
+    last_good = None
+    for k in order:
+        sv = float(scan_vals[k])
+        res = (sv, fixed) if axis == "phi1" else (fixed, sv)
+        if U_guess is None:
+            U_guess = FD.guess_enrich(res, surf, solver.N, solver.L, mode)
+        U, ok = solver.solve(U_guess, res)
+        if ok and solver.accept(U, res):
+            gamma[k] = solver.gamma(U, res)
+            cs[k] = _fd_adsorption(solver, U, res)
+            last_good = U.copy()
+            U_guess = last_good
+            _log_scan(progress, axis, mode, fixed, sv,
+                      f"g={gamma[k]:+.5f} cs={cs[k]:.3f} wall={U[0]:.3f}")
+        else:
+            U_guess = last_good      # keep previous warm U; NaN this point
+            _log_scan(progress, axis, mode, fixed, sv, f"None (ok={ok})")
     return np.asarray(gamma), np.asarray(cs)
 
 
@@ -212,45 +175,49 @@ def _interp_zero(x0, x1, y0, y1):
 
 
 def prewetting_line(chi, surf, binodal, progress=None, max_lines=None,
-                    cs_threshold=0.1, min_pts=2):
-    """(phi1*, phi2) pre-wetting points (gamma_thin == gamma_thick) by DUAL-SCAN crossing.
+                    cs_threshold=0.1, min_pts=2, solver=None):
+    """(phi1*, phi2) pre-wetting points (gamma_thin == gamma_thick) by DUAL-SCAN crossing,
+    fixed-grid FD backend.
 
-    Two scan axes, unioned:
-      fix_phi2 scan phi1 -> phi1*(phi2), the shallow parts of the line;
-      fix_phi1 scan phi2 -> phi2*(phi1), the near-vertical low-phi2 tail toward phi2->0.
-    Each axis builds a thin (forward) and thick (backward) branch via _branch_scan, then
-    reads crossings via _crossings. progress truthy -> stream one line per scan point.
-    max_lines caps the number of fixed values per axis (dry-run smoke test)."""
+    fix_phi2 scan phi1: at each phi2 scan a WIDE phi1 grid (from the dilute flank up into
+    the phi1-rich corner ~0.2). The thick branch is BORN at high phi1 (backward scan) where
+    the thick film is the sole attractor, then warm-continued inward; the thin branch is born
+    at low phi1 (forward scan). _crossings reads gamma_thin==gamma_thick gated by the
+    adsorption gap. The wide range is essential — a narrow window collapses the thick branch.
+
+    fix_phi1 scan phi2 recovers the near-vertical low-phi2 tail toward phi2->0.
+
+    One FDSolver is reused for every point of both axes (the reservoir enters only via the
+    BC/gamma, not the grid). progress truthy -> stream per scan point. max_lines caps the
+    number of fixed values per axis (dry-run smoke test)."""
     f_left, f_right, apex = _branches(binodal)
     tag = progress if isinstance(progress, str) else "pw"
     t0 = time.perf_counter()
+    if solver is None:
+        solver = FD.FDSolver(chi, surf, KAPPA)
 
-    def phi1_window(phi2):
-        # The thin/middle/thick states and their gamma crossing live in a NARROW band
-        # around the dilute flank f_left(phi2) (probe: ~[bl-0.006, bl+0.012]); scan tight
-        # so we don't grind through the no-state region to the right.
-        bl = f_left(phi2)
-        lo = max(1e-3, bl - 0.010)
-        hi = min(0.95, bl + 0.020)
-        return np.arange(lo, hi + 1e-9, 0.0015)
+    # WIDE phi1 grid: from just inside the dilute flank at the largest phi2, out to the
+    # phi1-rich corner where the thick film is born. Fixed across phi2 so one grid serves all.
+    p1_lo = max(1e-3, f_left(min(0.08, 0.9 * apex)) - 0.02)
+    p1_hi = min(0.95, max(0.20, f_right(0.02)))
+    phi1_grid = np.arange(p1_lo, p1_hi + 1e-9, 0.002)
 
     pts = []
-    # --- axis A: fix phi2, scan phi1 ---
+    # --- axis A: fix phi2, scan phi1 (wide) ---
     phi2_band = np.arange(0.005, min(0.09, 0.95 * apex), 0.005)
     if max_lines:
         phi2_band = phi2_band[:max_lines]
     for i, phi2 in enumerate(phi2_band):
         phi2 = float(phi2)
-        grid = phi1_window(phi2)
         if progress:
             print(f"[{tag}] axisA fix_phi2 {i+1}/{len(phi2_band)} phi2={phi2:.4f} "
-                  f"scan {len(grid)} phi1 in [{grid[0]:.4f},{grid[-1]:.4f}]",
+                  f"scan {len(phi1_grid)} phi1 in [{phi1_grid[0]:.4f},{phi1_grid[-1]:.4f}]",
                   file=sys.stderr, flush=True)
-        gt, ct = _branch_scan(chi, surf, phi2, grid, "phi1", "thin", f_right,
-                              progress=tag if progress else None)
-        gk, ck = _branch_scan(chi, surf, phi2, grid, "phi1", "thick", f_right,
-                              progress=tag if progress else None)
-        cr = _crossings(grid, gt, gk, ct, ck, cs_threshold, min_pts)
+        gt, ct = _fd_branch_scan(solver, surf, phi2, phi1_grid, "phi1", "thin",
+                                 progress=tag if progress else None)
+        gk, ck = _fd_branch_scan(solver, surf, phi2, phi1_grid, "phi1", "thick",
+                                 progress=tag if progress else None)
+        cr = _crossings(phi1_grid, gt, gk, ct, ck, cs_threshold, min_pts)
         for p1 in cr:
             pts.append((float(p1), phi2))
         if progress:
@@ -258,25 +225,25 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None,
                   f"phi1*={[round(x,4) for x in cr]}  elapsed={time.perf_counter()-t0:.0f}s",
                   file=sys.stderr, flush=True)
 
-    # --- axis B: fix phi1, scan phi2 (recovers the near-vertical low-phi2 tail) ---
+    # --- axis B: fix phi1, scan phi2 (near-vertical low-phi2 tail) ---
     phi1_lo = f_left(0.005)
     phi1_hi = f_left(min(0.08, 0.9 * apex))
     phi1_band = np.arange(min(phi1_lo, phi1_hi) - 0.005,
                           max(phi1_lo, phi1_hi) + 0.02, 0.005)
     if max_lines:
         phi1_band = phi1_band[:max_lines]
+    phi2_grid = np.arange(0.002, min(0.09, 0.95 * apex) + 1e-9, 0.0025)
     for i, phi1 in enumerate(phi1_band):
         phi1 = float(phi1)
-        grid = np.arange(0.002, min(0.09, 0.95 * apex) + 1e-9, 0.0025)
         if progress:
             print(f"[{tag}] axisB fix_phi1 {i+1}/{len(phi1_band)} phi1={phi1:.4f} "
-                  f"scan {len(grid)} phi2 in [{grid[0]:.4f},{grid[-1]:.4f}]",
+                  f"scan {len(phi2_grid)} phi2 in [{phi2_grid[0]:.4f},{phi2_grid[-1]:.4f}]",
                   file=sys.stderr, flush=True)
-        gt, ct = _branch_scan(chi, surf, phi1, grid, "phi2", "thin", f_right,
-                              progress=tag if progress else None)
-        gk, ck = _branch_scan(chi, surf, phi1, grid, "phi2", "thick", f_right,
-                              progress=tag if progress else None)
-        cr = _crossings(grid, gt, gk, ct, ck, cs_threshold, min_pts)
+        gt, ct = _fd_branch_scan(solver, surf, phi1, phi2_grid, "phi2", "thin",
+                                 progress=tag if progress else None)
+        gk, ck = _fd_branch_scan(solver, surf, phi1, phi2_grid, "phi2", "thick",
+                                 progress=tag if progress else None)
+        cr = _crossings(phi2_grid, gt, gk, ct, ck, cs_threshold, min_pts)
         for p2 in cr:
             pts.append((phi1, float(p2)))
         if progress:
