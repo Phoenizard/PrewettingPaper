@@ -9,11 +9,20 @@
 - GitHub：https://github.com/Phoenizard/PrewettingPaper （public）
 - 服务器：AutoDL，16 核 / 1TB 内存 / Ubuntu 20.04；代码在 /root/autodl-tmp/PrewettingPaper，numenv 已建
 - binodal 诊断：6 种拓扑 T-a..T-f 已出图（out/_binodal_check/）
-- 验证进度：本地 1 / ~770；服务器 16-case 首测已算完 10 个 pw_line.csv（画图 bug 已修，待带修复重跑确认）
+- 验证进度：本地 1 / ~770；服务器有 10 个 pw_line.csv 基线（已解耦出图）
+- 计算/绘图已解耦：verify.py 只算写 pw_line.csv（不 import matplotlib），plot.py 单独 CSV->PNG
+- 计算加速已落地（均藏在开关后，USE_ANALYTIC_JAC / USE_WARM_START）：
+  - Layer 1 解析雅可比 + mu(res)/f_b(res) 缓存 —— bench 显示 852s vs baseline >1046s，约 1.3-1.4×
+  - Layer 2 warm-start —— 目前空转（守卫要求恰好 2 分支，转变线附近常 3 分支，总退回冷启动），需改守卫
+  - 单点校验：jac on-vs-off max|dgamma|=8e-17；warm 分支数≠2 时退回冷启动、结果一致
+- regression 门尚未跑通确认（≤1e-3）：run_regression.sh 已写；一次误启动为串行（nproc 读 OMP_NUM_THREADS=1 → cores=1，已修为 nproc --all，未带修复重跑）
+- 工作流规则（新，均记入 memory）：ssh 服务器工作流；实验只在服务器跑、禁本地 smoke；每个实验一个 screen + 只给 `screen -r`；实验前给矩阵并等确认 + 先 dry-run；不擅自停/重启在跑实验；git 指令单独执行；日志按类型进 out/logs/，正式逐-case 实验日志镜像结果树；新增 check-progress skill
 
 ## 下一步
 
-- 下次：带修复重跑 16-case 首测（skip-existing 会复用已算的 10 个），确认全部出图 + SUMMARY，量并行加速比；通过后再逐 chi 目录扩规模。
+- 未完：regression 门（10 基线，≤1e-3）。先 dry-run 单 case 跑通 run_regression.sh（带 nproc --all 修复），再经确认并行跑全部 10 个；通过即可正式落地 Layer 1。
+- warm-start 守卫改进：放宽到"≥2 分支、按 thin/thick 就近匹配"，再验加速与 ≤1e-3。
+- 之前遗留：带修复重跑 16-case 首测（skip-existing 会复用已算的 10 个），确认全部出图 + SUMMARY，量并行加速比；通过后再逐 chi 目录扩规模。
 - TODO: 部署服务器无人值守跑全部 770 case（串行单核约 10-13 天，见下方成本估算）。
   - 并行由启动脚本 scripts/run_parallel.sh 处理（xargs -P，不写进 Python 代码）；case 独立。
   - [done] verify.py 已加 --skip-existing / --no-summary / --rebuild-summary（并行无竞态 + 断点续跑）。
@@ -50,6 +59,22 @@
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-07（下午：计算加速 + 工作流规范）
+
+- 计算/绘图解耦：verify.py 只算写 CSV、不碰 matplotlib（根除并发画图竞态）；新增 plot.py（CSV->PNG）、
+  plotting.render_phase_map（(实验变量+结果)->图 的通用包装）。10 个基线 CSV 已补出 overlay.png。
+- 计算加速（藏开关后）：equilibrium.py 加解析 fun_jac/bc_jac（来自 hessian_fb，与 res 无关）、
+  mu(res)/f_b(res) 缓存、Profile 带 sol_x/sol_y、warm-start（守卫 + 冷启动回退）；thermo.py 加
+  reservoir_potentials 与可选 res_mu/res_fb；verify.py prewetting_line 串 warm + 进度日志。
+- bench（T-a 模板）：Layer1=852s、both=834s、baseline>1046s(被手动停)。→ 雅可比约 1.3-1.4×；
+  warm-start 空转（solve_bvp 次数 both 2290 vs l1 2322，几乎无减），守卫因常见 3 分支不通过。
+- 新增 bench.py（测速 + solve_bvp 计数，按开关分档）、regression.py（内存重算基线、断言 ≤1e-3、不写 out/）、
+  run_regression.sh（xargs 并行、日志镜像结果树 out/logs/regression/<...>/run.log）。
+- 踩坑：nproc 读 OMP_NUM_THREADS=1 → run_regression 误以 cores=1 串行启动；已改 nproc --all（未带修复重跑）。
+- 工作流规则大量确立（见「当前状态」末条，均入 memory）：dry-run 先行、实验前出矩阵并等确认、不擅自停实验、
+  screen 一实验一会话只给 `screen -r`、git 单独执行、日志分类镜像结果树；新增 check-progress skill。
+- 未完：regression 门未跑通确认；服务器上一个串行 reg 运行待用户决定停/留。
 
 ### 2026-07-07
 
