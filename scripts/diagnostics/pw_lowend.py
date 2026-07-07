@@ -36,7 +36,8 @@ import verify as V  # noqa: E402
 KAPPA = E.T.Kappa(1.0, 1.0)
 
 
-def _solve_profile_why(chi, res, surf, seed=None, w=2.0, L=12.0, n=300, warm=None):
+def _solve_profile_why(chi, res, surf, seed=None, w=2.0, L=12.0, n=300, warm=None,
+                       tol=1e-8, max_nodes=30000):
     """Copy of equilibrium.solve_profile that, instead of a bare None, RETURNS WHY it
     failed so the autopsy can tell apart the failure modes:
       ('nonconv', sol)         solve_bvp did not converge (sol.success False)
@@ -64,7 +65,7 @@ def _solve_profile_why(chi, res, surf, seed=None, w=2.0, L=12.0, n=300, warm=Non
     sol = solve_bvp(
         lambda z, y: E._rhs(z, y, chi, res_arr, KAPPA, res_mu),
         lambda ya, yb: E._bc(ya, yb, chi, res_arr, surf, KAPPA),
-        x, y0, fun_jac=fun_jac, bc_jac=bc_jac, tol=1e-8, max_nodes=30000,
+        x, y0, fun_jac=fun_jac, bc_jac=bc_jac, tol=tol, max_nodes=max_nodes,
     )
     if not sol.success:
         return ("nonconv", f"status={sol.status} nodes={sol.x.size} msg={sol.message}")
@@ -118,10 +119,22 @@ def _thick_autopsy(chi, phi2, surf, warm_thick, phi1):
     # Scan phi1 around the guess at THIS phi2, calling the production track_branches path,
     # and report thin/thick None-status + wall phi + why (nonconv/reject) for the thick.
     print(f"    [autopsy] phi1 scan at phi2={phi2:.4f} (thick via warm@L=12):", flush=True)
+    fail_phi1 = None
     for phi1s in np.arange(phi1 - 0.004, phi1 + 0.0041, 0.0005):
         why = _solve_profile_why(chi, (float(phi1s), phi2), surf, warm=warm_thick,
                                  L=12.0, n=300)
         print(f"      phi1={phi1s:.4f}  thick warm@L=12 -> {why[0]}: {why[1:]}", flush=True)
+        if why[0] == "nonconv" and phi1s > phi1 and fail_phi1 is None:
+            fail_phi1 = float(phi1s)  # first failure to the RIGHT of the guess
+    # CANDIDATE FIX test: at a phi1 that failed with tol=1e-8/max_nodes=30000, does a
+    # looser tol or a bigger node budget converge? (failure was max_nodes exceeded.)
+    if fail_phi1 is not None:
+        print(f"    [autopsy] fix test at phi1={fail_phi1:.4f} phi2={phi2:.4f} "
+              f"(thick warm@L=12):", flush=True)
+        for tol, mn in [(1e-8, 100000), (1e-7, 30000), (1e-7, 100000), (1e-6, 100000)]:
+            why = _solve_profile_why(chi, (fail_phi1, phi2), surf, warm=warm_thick,
+                                     L=12.0, n=300, tol=tol, max_nodes=mn)
+            print(f"      tol={tol:.0e} max_nodes={mn} -> {why[0]}: {why[1:]}", flush=True)
 
 
 def _pw_point_diag(chi, phi2, surf, warm_thin, warm_thick, phi1_guess,
