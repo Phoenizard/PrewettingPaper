@@ -196,10 +196,11 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None,
     if solver is None:
         solver = FD.FDSolver(chi, surf, KAPPA)
 
-    # WIDE phi1 grid: from just inside the dilute flank at the largest phi2, out to the
-    # phi1-rich corner where the thick film is born. Fixed across phi2 so one grid serves all.
+    # WIDE phi1 grid: from just inside the dilute flank out to the phi1-rich corner where
+    # the thick film is born (~apex + margin; the thick branch is robust by there, so no need
+    # to scan into the dense phase). Fixed across phi2 so one grid serves all.
     p1_lo = max(1e-3, f_left(min(0.08, 0.9 * apex)) - 0.02)
-    p1_hi = min(0.95, max(0.20, f_right(0.02)))
+    p1_hi = min(0.95, apex + 0.05)
     phi1_grid = np.arange(p1_lo, p1_hi + 1e-9, 0.002)
 
     pts = []
