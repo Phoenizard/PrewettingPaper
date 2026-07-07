@@ -173,6 +173,12 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
         band = band[:max_lines]
     tag = progress if isinstance(progress, str) else "pw"
     t0 = time.perf_counter()
+    # The continuation only needs ONE sturdy starting point: a phi2 whose thin/thick pair
+    # is well separated. Separation varies monotonically across the band, so we do NOT
+    # scan all of it — we take the FIRST phi2 whose sep clears SEED_SEP_OK and stop. Only
+    # if none clears the bar do we fall back to the widest we found. This cuts the seed
+    # phase from ~6 scans to typically 1-2.
+    SEED_SEP_OK = 0.30
     seeds = []
     for i, phi2 in enumerate(band):
         if progress:  # announce each phi2 BEFORE its (slow) scan, so no silent block
@@ -187,6 +193,12 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
             hit = f"phi1*={r[0]:.4f} sep={r[3]:.3f}" if r else "no pair"
             print(f"[{tag}] seed {i+1}/{len(band)} phi2={phi2:.3f} DONE {hit} "
                   f"elapsed={time.perf_counter()-t0:.0f}s", file=sys.stderr, flush=True)
+        if r and sep >= SEED_SEP_OK:  # good enough -> stop scanning the rest of the band
+            if progress:
+                print(f"[{tag}] seed chosen at phi2={phi2:.3f} (sep={sep:.3f} "
+                      f">= {SEED_SEP_OK}); skipping remaining {len(band)-i-1} phi2",
+                      file=sys.stderr, flush=True)
+            break
     if not seeds:
         if progress:
             print(f"[{tag}] no seed on band {band[0]:.2f}..{band[-1]:.2f}",
