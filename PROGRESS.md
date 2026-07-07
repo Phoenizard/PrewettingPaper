@@ -4,42 +4,33 @@
 
 ## 当前状态
 
-- 阶段：验证 result/ 结果（同组成员的求解，做独立复核）；服务器并行部署链路已打通，调试收尾中
-- 代码：src/ 5 模块 + scripts/ 3 驱动（含 run_parallel.sh），均可运行
+- 阶段：推倒重来。此前 Claude Code 写的全部代码已删除，从头重新审视问题。
+- 决定（2026-07-08）：之前所有代码已不可再维护，在其上的后续改进也无意义，故删除代码库
+  所有代码脚本（src/ 全部 .py + scripts/ 全部 .py/.sh，含 diagnostics）。commit f27dcb5。
+  reference/（同组成员的可运行参考实现）保留、未动，将作为后续从头实现的对照基准。
+- 代码：src/、scripts/ 已清空，无任何可运行代码。
 - GitHub：https://github.com/Phoenizard/PrewettingPaper （public）
-- 服务器：AutoDL，16 核 / 1TB 内存 / Ubuntu 20.04；代码在 /root/autodl-tmp/PrewettingPaper，numenv 已建
-- binodal 诊断：6 种拓扑 T-a..T-f 已出图（out/_binodal_check/）
-- 验证进度：本地 1 / ~770；服务器有 10 个 pw_line.csv 基线（已解耦出图）
-- 计算/绘图已解耦：verify.py 只算写 pw_line.csv（不 import matplotlib），plot.py 单独 CSV->PNG
-- 计算加速已落地并验证不改结果（均藏在开关后，USE_ANALYTIC_JAC / USE_WARM_START）：
-  - Layer 1 解析雅可比 + mu(res)/f_b(res) 缓存 —— 约 1.3-1.4×（雅可比为主）
-  - Layer 2 warm-start —— 目前空转（守卫要求恰好 2 分支，转变线附近常 3 分支，总退回冷启动）；改进搁置
-- 验证已通过（方法：产出 → 事后对比，不写重算式测试）：优化代码跑 10 基线 → out/verify_opt，
-  compare.py 逐点比基线，10/10 PASS，max_dev ≤ 5e-13（远低于 1e-3）。结论：优化不改结果，可用于全量 770。
-  - 工具：verify.py 加 VERIFY_OUT/VERIFY_PROGRESS/PW_MAX_PHI2；plot.py 认 VERIFY_OUT；run_parallel.sh 加
-    MANIFEST 覆盖 + nproc --all + 直接解释器默认；新增 compare.py；删 bench/regression（重算式测试逻辑错误）
-- 工作流规则（新，均记入 memory）：ssh 服务器工作流；实验只在服务器跑、禁本地 smoke；每个实验一个 screen + 只给 `screen -r`；实验前给矩阵并等确认 + 先 dry-run；不擅自停/重启在跑实验；git 指令单独执行；日志按类型进 out/logs/，正式逐-case 实验日志镜像结果树；新增 check-progress skill
+- 服务器：AutoDL；当前已由用户关闭。
+- 为什么推倒：核心求解一直建在 scipy solve_bvp 上，自适应网格撑不住低 phi2 的宽厚膜（爆
+  max_nodes、丢厚支），围绕它叠了多层补丁仍解决不了 om2=-0.40 线延到 phi2→0 的问题；
+  后期虽认识到应改固定网格并采纳参考方法，但实现方式是"凭理解重写 + 试错"、还自造了参考里
+  没有的判据（accept 远场拒绝）与自己搏斗，越走越乱。结论：不值得继续维护，清零重来。
+- 教训（已记 memory mirror-reference-code-dont-reinvent）：有可运行参考实现时，应逐项对齐其
+  确切数值/逻辑（L、N、初值、扫描范围、判据…）再验证一致，而不是重写后试错。
 
 ## 下一步
 
-- [遗留问题, 暂不处理] pre-wetting 转变线两端漏点:画廊对比 case chi13=2.8 / om1=om2=-0.30 发现,
-  result 参考的 PW 线覆盖 phi2≈0–0.09(贴 binodal 左翼一整条),我们只得 phi2=0.03–0.06 四个点,两端都缺。
-  不是密度、也不是扫描范围问题(phi2 从 0.01 起步长 0.01,本就扫过 0.01/0.02/0.07/0.08/0.09,却没记到点)。
-  根因方向:两端每个 phi2 上 find_states/变号夹逼没抓到转变(可能没同时得到薄/厚两支,或 phi1 内层网格
-  没框住转变点)。属复核代码在 PW 线两端的检测缺陷,待后续查(先登记不改)。
-- [done] 10 基线验证通过（compare 10/10 ≤5e-13）→ 优化代码可用于全量。
-- 用优化代码跑全量 770（分批：产出 → 对比）：run_parallel.sh 走 result_cases.txt，产出到 out/verify；
-  逐 chi 目录扩规模；每批先 dry-run、给矩阵等确认再上（见 doc/note/Workflow.md）。
-- [搁置] warm-start 守卫改进（放宽到"≥2 分支、按 thin/thick 就近匹配"），若要再提速再做，之后仍走产出→对比验证。
-- TODO: 部署服务器无人值守跑全部 770 case（串行单核约 10-13 天，见下方成本估算）。
-  - 并行由启动脚本 scripts/run_parallel.sh 处理（xargs -P，不写进 Python 代码）；case 独立。
-  - [done] verify.py 已加 --skip-existing / --no-summary / --rebuild-summary（并行无竞态 + 断点续跑）。
-  - [done] 单 case 现实耗时：服务器单线程满速约 17-25 min/case（与本地估算同量级）。
-  - 算法加速（可与并行叠乘）：find_states 沿 phi1 扫描改暖启动/延拓，减少 solve_bvp 重解。
-- 比对 out/verify/ 与 result/ 的 pre-wetting 转变线，记录一致/差异
-- TODO: 结果对比 UI（快速看每个 stage / 每种配置下 本地 vs result 的差异）。可行性见下。
-- phi_inf 扫描区间后期扩到全区间（现为 [0,0.4]^2，步长 0.01）
-- 补 environment.yml，固化 numenv 依赖
+从头重新审视问题。代码已清零，先想清楚再写。
+
+- 先定路线：以 reference/（可运行的参考实现）为基准，逐项对齐其确切数值与逻辑（固定网格
+  L/N、初值构造、双向扫描范围、crossing/迟滞判据、Newton 细节），而不是重写后试错。
+  独立性 = 我们自己的实现，但数值配置照参考对齐、先复现其结果，再谈适配。
+- 由用户主导决定从哪里起步、用什么骨架，Claude 不擅自开写。
+- 之前的诊断结论仍可参考（见进度日志）：低 phi2 有薄/中/厚三个表面态，真 pre-wetting 是
+  薄↔厚等深转变；参考图正确，线应延到 phi2→0。这些是"要复现的目标"，不是"要保的代码"。
+
+（以下为历史遗留 TODO，代码已删，仅存档：全量 770 case 扫描、结果对比 UI、
+environment.yml 固化依赖、phi_inf 扫描扩到全区间。重来后按新代码再规划。）
 
 ## 结果对比 UI 可行性
 
@@ -67,6 +58,23 @@
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-08（推倒重来：删除全部代码）
+
+- 决定删除代码库所有代码脚本（src/ 全部 .py + scripts/ 全部 .py/.sh，含 diagnostics），
+  从头重新审视问题。commit f27dcb5（19 文件、2743 行删除）。reference/ 保留未动。
+- 原因：核心一直建在 scipy solve_bvp，撑不住低 phi2 宽厚膜，多轮补丁未解决 om2=-0.40 线延到
+  phi2→0；后期改固定网格 + 采纳参考方法时，实现走成"凭理解重写 + 试错 + 自造判据"，越改越乱。
+  判定：已不可维护、后续改进无意义，故清零。
+- 本 session 有价值的诊断结论（供重来时参考，非要保的代码）：
+  - 低 phi2 出现薄/中/厚三个表面态（墙面 phi1≈0.34/0.68/0.92）；真 pre-wetting 是薄↔厚等深
+    转变，中间态是势垒；参考图正确，线应延到 phi2→0。
+  - solve_bvp 丢厚支的机制：厚膜变宽爆 max_nodes；真厚态存在的 phi1 区间太窄，等 gamma 交叉前
+    厚态已消失。
+  - 参考方法（固定网格 Newton + 双向扫描 + crossing）机制正确：厚支在高 phi1（phi1 富集角，
+    phi1_scan 到 0.2）出生、warm 连续进来；phi1_scan=linspace(0.0001,0.2,400)、逐点更新
+    phi1_inf、首点冷启后 warm（thermodynamics.py:667-680）。
+- 教训记入 memory：mirror-reference-code-dont-reinvent（有参考实现就逐项对齐其数值，别重写试错）。
 
 ### 2026-07-07（夜：结果管理 + 画廊,发现 PW 线两端漏点）
 
