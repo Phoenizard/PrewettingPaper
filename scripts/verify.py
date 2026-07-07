@@ -61,20 +61,24 @@ def _branches(binodal):
     return f_left, f_right, apex_phi2
 
 
-def _seed_scan(chi, surf, phi2, f_left, f_right):
+def _seed_scan(chi, surf, phi2, f_left, f_right, progress=None):
     """Multi-start scan at fixed phi2; on the first thin/thick gamma sign change return
     (phi1_star, thin_warm, thick_warm, sep), else None. Only used to SEED the
     continuation with one well-separated point on the line (its converged thin/thick
-    profiles), not to trace the whole line."""
+    profiles), not to trace the whole line.
+
+    progress (a tag str) -> stream one line PER phi1 start point, so the seed scan (a
+    slow multi-start BVP loop) is never a silent block: every loop iteration is logged."""
     bl = f_left(phi2)
     dense = [(f_right(phi2), phi2), (0.97 * f_right(phi2), phi2)]
     grid = bl + np.arange(-0.03, 0.012, 0.0025)
     grid = grid[grid > 1e-3]
     prev = None
     prev_states = None
-    for phi1 in grid:
+    for i, phi1 in enumerate(grid):
         st = E.find_states(chi, (phi1, phi2), surf, KAPPA, dense_seeds=dense,
                            warm=prev_states)
+        hit = ""
         if len(st) >= 2:
             prev_states = ((st[0].sol_x, st[0].sol_y), (st[-1].sol_x, st[-1].sol_y))
             d = st[0].gamma - st[-1].gamma
@@ -82,12 +86,22 @@ def _seed_scan(chi, surf, phi2, f_left, f_right):
                 p0, d0 = prev
                 phi1_star = p0 + (phi1 - p0) * (0 - d0) / (d - d0)
                 sep = abs(st[0].phi[0][0] - st[-1].phi[0][0])
+                if progress:
+                    print(f"[{progress}]   seed-scan phi2={phi2:.3f} pt {i+1}/{len(grid)} "
+                          f"phi1={phi1:.4f} n_states={len(st)} dgamma={d:+.2e} "
+                          f"SIGN-CHANGE -> phi1*={phi1_star:.4f} sep={sep:.3f}",
+                          file=sys.stderr, flush=True)
                 return (phi1_star, (st[0].sol_x, st[0].sol_y),
                         (st[-1].sol_x, st[-1].sol_y), sep)
             prev = (phi1, d)
+            hit = f"n_states={len(st)} dgamma={d:+.2e}"
         else:
             prev = None
             prev_states = None
+            hit = f"n_states={len(st)} (no pair)"
+        if progress:
+            print(f"[{progress}]   seed-scan phi2={phi2:.3f} pt {i+1}/{len(grid)} "
+                  f"phi1={phi1:.4f} {hit}", file=sys.stderr, flush=True)
     return None
 
 
@@ -161,13 +175,17 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
     t0 = time.perf_counter()
     seeds = []
     for i, phi2 in enumerate(band):
-        r = _seed_scan(chi, surf, float(phi2), f_left, f_right)
+        if progress:  # announce each phi2 BEFORE its (slow) scan, so no silent block
+            print(f"[{tag}] seed {i+1}/{len(band)} 计算 phi2={phi2:.3f} ...",
+                  file=sys.stderr, flush=True)
+        r = _seed_scan(chi, surf, float(phi2), f_left, f_right,
+                       progress=tag if progress else None)
         if r:
             phi1_star, tw, kw, sep = r
             seeds.append((float(phi2), phi1_star, tw, kw, sep))
-        if progress:  # seed scan is slow (multi-start BVP per phi2) -> stream each one
+        if progress:  # per-phi2 summary after its point-by-point scan
             hit = f"phi1*={r[0]:.4f} sep={r[3]:.3f}" if r else "no pair"
-            print(f"[{tag}] seed {i+1}/{len(band)} phi2={phi2:.3f} {hit} "
+            print(f"[{tag}] seed {i+1}/{len(band)} phi2={phi2:.3f} DONE {hit} "
                   f"elapsed={time.perf_counter()-t0:.0f}s", file=sys.stderr, flush=True)
     if not seeds:
         if progress:

@@ -89,11 +89,16 @@ def main(argv):
     f_left, f_right, apex = V._branches(bd)
 
     # Seed exactly as production does: widest-separation pair on the middle band.
+    # Stream every phi2 and every phi1 start point (no silent loop).
+    band = np.arange(0.03, min(0.09, 0.85 * apex), 0.01)
     seeds = []
-    for phi2 in np.arange(0.03, min(0.09, 0.85 * apex), 0.01):
-        r = V._seed_scan(chi, surf, float(phi2), f_left, f_right)
+    for i, phi2 in enumerate(band):
+        print(f"[lowend] seed {i+1}/{len(band)} 计算 phi2={phi2:.3f} ...", flush=True)
+        r = V._seed_scan(chi, surf, float(phi2), f_left, f_right, progress="lowend")
         if r:
             seeds.append((float(phi2), r[0], r[1], r[2], r[3]))
+        print(f"[lowend] seed {i+1}/{len(band)} phi2={phi2:.3f} DONE "
+              f"{'phi1*=%.4f sep=%.3f' % (r[0], r[3]) if r else 'no pair'}", flush=True)
     if not seeds:
         print(f"{'/'.join(rel)}: no seed", flush=True)
         return
