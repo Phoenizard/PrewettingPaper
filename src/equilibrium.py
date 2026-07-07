@@ -14,6 +14,9 @@ thermo (dW, df_surf, W, f_surf).
 """
 from __future__ import annotations
 
+import json
+import os
+import sys
 from dataclasses import dataclass
 
 import numpy as np
@@ -27,6 +30,13 @@ import thermo as T
 # as the initial guess, with a guard + cold-multistart fallback.
 USE_ANALYTIC_JAC = True
 USE_WARM_START = True
+
+
+def _diag(**kw):
+    """Emit one [PWDIAG] JSONL line to stderr when PW_DIAG is set (diagnosis only,
+    no behaviour change, parallel-safe: stderr, no files)."""
+    if os.environ.get("PW_DIAG"):
+        print("[PWDIAG] " + json.dumps(kw), file=sys.stderr, flush=True)
 
 
 @dataclass
@@ -138,24 +148,24 @@ def solve_profile(chi, res, surf, kappa, seed=None, w=2.0, L=12.0, n=300,
                    sol_x=sol.x, sol_y=sol.y)
 
 
-def _distinct(profiles):
+def _distinct(profiles, tol=5e-3):
     """Keep profiles with distinct wall composition (phi1(0), phi2(0))."""
     out = []
     for p in profiles:
         phi0 = (p.phi[0][0], p.phi[1][0])
-        if all(np.hypot(phi0[0] - q.phi[0][0], phi0[1] - q.phi[1][0]) > 5e-3
+        if all(np.hypot(phi0[0] - q.phi[0][0], phi0[1] - q.phi[1][0]) > tol
                for q in out):
             out.append(p)
     return out
 
 
-def _warm_ok(states, warm, band=0.05):
+def _warm_ok(states, warm, band=0.05, sep=5e-3):
     """Accept a warm-started result only if it reproduces two distinct, correctly
     ordered branches that stayed close (wall phi1 within `band`) to last point's."""
     if len(states) != 2:
         return False
     states = sorted(states, key=lambda q: q.phi[0][0])
-    if states[1].phi[0][0] - states[0].phi[0][0] <= 5e-3:
+    if states[1].phi[0][0] - states[0].phi[0][0] <= sep:
         return False
     prev_thin_phi1 = warm[0][1][0][0]   # warm[0]=(x,y); y[0]=phi1 row; [0]=wall node
     prev_thick_phi1 = warm[1][1][0][0]
@@ -163,7 +173,8 @@ def _warm_ok(states, warm, band=0.05):
             and abs(states[1].phi[0][0] - prev_thick_phi1) <= band)
 
 
-def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=None):
+def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=None,
+                distinct_tol=5e-3):
     """All distinct surface states for reservoir res, via targeted multi-start.
 
     Seeds: flat (thin basin) + wall-plateau targets in the dense basin. Pass
@@ -174,6 +185,11 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
     `warm=(thin_state, thick_state)` (each an (x, y) from the previous point) tries
     two targeted warm-started solves first; the result is used only if it passes
     `_warm_ok`, otherwise we fall back to the full cold multi-start (== old path).
+
+    `distinct_tol` is the wall-composition separation below which two profiles count
+    as the same branch. The default 5e-3 is the production value; the pre-wetting
+    endpoint fallback (verify.py) passes a smaller value so the near-merged thin/thick
+    branches at the surface-critical end survive as two states.
     """
     res = np.asarray(res, dtype=float)
     m1i, m2i, fbi = T.reservoir_potentials(res, chi)
@@ -182,8 +198,8 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
     if USE_WARM_START and warm is not None:
         cand = [solve_profile(chi, res, surf, kappa, L=L, n=n,
                               res_mu=res_mu, res_fb=fbi, warm=w) for w in warm]
-        acc = _distinct([p for p in cand if p is not None])
-        if _warm_ok(acc, warm):
+        acc = _distinct([p for p in cand if p is not None], tol=distinct_tol)
+        if _warm_ok(acc, warm, sep=distinct_tol):
             acc.sort(key=lambda q: q.phi[0][0])
             return acc
         # guard failed -> cold multi-start below
@@ -193,6 +209,7 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
     seeds = [(res[0], res[1])] + list(dense_seeds)
     widths = (1.5, 2.5)
     found = []
+    raw = []  # every converged candidate, before the distinctness filter (diag)
     for s in seeds:
         for w in widths:
             p = solve_profile(chi, res, surf, kappa, s, w=w, L=L, n=n,
@@ -200,8 +217,16 @@ def find_states(chi, res, surf, kappa, dense_seeds=None, L=12.0, n=300, warm=Non
             if p is None:
                 continue
             phi0 = (p.phi[0][0], p.phi[1][0])
-            if all(np.hypot(phi0[0] - q.phi[0][0], phi0[1] - q.phi[1][0]) > 5e-3
+            raw.append((phi0, s, w))
+            if all(np.hypot(phi0[0] - q.phi[0][0], phi0[1] - q.phi[1][0]) > distinct_tol
                    for q in found):
                 found.append(p)
     found.sort(key=lambda q: q.phi[0][0])
+    if os.environ.get("PW_DIAG"):
+        # Split "thick never converged" (few raw candidates) from "branches merged
+        # under the threshold" (>=2 raw but <2 distinct) at the empty phi2 lines.
+        _diag(kind="find_states", res=[float(res[0]), float(res[1])],
+              distinct_tol=distinct_tol, L=L, n_raw=len(raw), n_distinct=len(found),
+              raw=[[float(p0[0]), float(p0[1]), [float(s[0]), float(s[1])], float(w)]
+                   for (p0, s, w) in raw])
     return found

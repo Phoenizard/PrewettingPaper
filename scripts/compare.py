@@ -35,7 +35,7 @@ def _iter_cases(root):
 
 
 def _deviation(a, b):
-    """Max |dphi1| over phi2-matched rows, plus count of unmatched rows."""
+    """Max |dphi1| over phi2-matched rows, plus unmatched counts on each side."""
     used = set()
     max_dev = 0.0
     for p1a, p2a in a:
@@ -45,8 +45,9 @@ def _deviation(a, b):
             continue
         used.add(j)
         max_dev = max(max_dev, abs(p1a - b[j][0]))
-    unmatched = (len(a) - len(used)) + (len(b) - len(used))
-    return max_dev, unmatched
+    unmatched_pre = len(a) - len(used)   # pre rows with no post match (regressions)
+    unmatched_post = len(b) - len(used)  # post-only rows (recovered endpoints)
+    return max_dev, unmatched_pre, unmatched_post
 
 
 def main(argv):
@@ -55,6 +56,11 @@ def main(argv):
         i = argv.index("--tol")
         tol = float(argv[i + 1])
         argv = argv[:i] + argv[i + 2:]
+    # --allow-extend: pass a case when every PRE row is reproduced within tol, even
+    # if POST added rows (the recovered prewetting-line endpoints). Without it, any
+    # row-count difference is a hard fail (strict optimization-regression check).
+    allow_extend = "--allow-extend" in argv
+    argv = [x for x in argv if x != "--allow-extend"]
     pre = argv[0] if len(argv) >= 1 else os.path.join("out", "verify")
     post = argv[1] if len(argv) >= 2 else os.path.join("out", "verify_opt")
 
@@ -71,13 +77,16 @@ def main(argv):
             print(f"[FAIL] {'/'.join(rel)}  post side missing")
             nfail += 1
             continue
-        dev, unmatched = _deviation(a, b)
-        ok = (dev <= tol) and (unmatched == 0)
+        dev, um_pre, um_post = _deviation(a, b)
+        ok = (dev <= tol) and (um_pre == 0) and (allow_extend or um_post == 0)
         nfail += 0 if ok else 1
         print(f"[{'PASS' if ok else 'FAIL'}] {'/'.join(rel)}  "
-              f"n_pre={len(a)} n_post={len(b)} max_dev={dev:.2e} unmatched={unmatched}")
+              f"n_pre={len(a)} n_post={len(b)} max_dev={dev:.2e} "
+              f"unmatched_pre={um_pre} unmatched_post={um_post}")
 
-    print(f"\n{len(rels) - nfail}/{len(rels)} passed (tol={tol:g})  pre={pre} post={post}")
+    mode = "allow-extend" if allow_extend else "strict"
+    print(f"\n{len(rels) - nfail}/{len(rels)} passed (tol={tol:g}, {mode})  "
+          f"pre={pre} post={post}")
     return 1 if nfail else 0
 
 

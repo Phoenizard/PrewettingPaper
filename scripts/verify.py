@@ -19,6 +19,7 @@ Usage:
   --no-summary      skip SUMMARY.csv write (for parallel workers; rebuild after)
 """
 import csv
+import json
 import os
 import sys
 import time
@@ -38,6 +39,18 @@ SUMMARY = os.path.join(ROOT, "out", "verify", "SUMMARY.csv")
 SUMMARY_COLS = ["chi_dir", "om_dir", "chibb_dir", "n_pw",
                 "phi1_min", "phi1_max", "phi2_min", "phi2_max", "status"]
 
+# Scan the dilute-flank phi2 up to this fraction of the binodal apex. The prewetting
+# line runs from near the binary limit (phi2->0) to the wetting transition just below
+# the apex; the old 0.85 cap truncated the high-phi2 end of the line.
+PHI2_HI_FRAC = 0.97
+
+
+def _diag(**kw):
+    """Emit one [PWDIAG] JSONL line to stderr when PW_DIAG is set (diagnosis only,
+    no behaviour change, parallel-safe: stderr, no files)."""
+    if os.environ.get("PW_DIAG"):
+        print("[PWDIAG] " + json.dumps(kw), file=sys.stderr, flush=True)
+
 
 def _branches(binodal):
     """Dilute-left and dense-right phi1(phi2) interpolators + apex phi2."""
@@ -53,6 +66,41 @@ def _branches(binodal):
     return f_left, f_right, apex_phi2
 
 
+def _scan_line(chi, surf, phi2, dense, grid, L, distinct_tol, diag_tag=None):
+    """Scan phi1 over `grid` at fixed phi2 for the thin/thick gamma crossing.
+
+    Returns (phi1_star, phi2) at the first sign change of d = gamma_thin - gamma_thick,
+    else None. Warm-starts within the line only (raw states from the previous phi1).
+    `n_calls` (find_states calls made) is stashed on the function for the caller's log.
+    With the production args (L=12, distinct_tol=5e-3, the default phi1 grid) this
+    reproduces the original inner loop byte-for-byte.
+    """
+    _scan_line.n_calls = 0
+    prev = None
+    prev_states = None  # (thin, thick) raw solver states from the last phi1
+    for phi1 in grid:
+        st = E.find_states(chi, (phi1, phi2), surf, KAPPA, dense_seeds=dense,
+                           warm=prev_states, L=L, distinct_tol=distinct_tol)
+        _scan_line.n_calls += 1
+        if diag_tag is not None:
+            _diag(kind="scan", tag=diag_tag, phi2=float(phi2), phi1=float(phi1),
+                  n=len(st), d=(float(st[0].gamma - st[-1].gamma) if len(st) >= 2 else None),
+                  branches=[[float(s.phi[0][0]), float(s.phi[1][0]), float(s.gamma)]
+                            for s in st])
+        if len(st) >= 2:
+            prev_states = ((st[0].sol_x, st[0].sol_y),
+                           (st[-1].sol_x, st[-1].sol_y))
+            d = st[0].gamma - st[-1].gamma
+            if prev is not None and prev[1] * d < 0:
+                p0, d0 = prev
+                return (p0 + (phi1 - p0) * (0 - d0) / (d - d0), phi2)
+            prev = (phi1, d)
+        else:
+            prev = None
+            prev_states = None
+    return None
+
+
 def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
     """(phi1*, phi2) points where gamma_thin = gamma_thick, scanning the dilute flank.
 
@@ -61,13 +109,28 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
     find_states calls, elapsed seconds); a string is used as a line prefix/label.
     max_lines: cap the phi2 sweep to the first N lines (dry-run smoke test — a
     short, partial run to prove the pipeline works; not a full result).
+
+    Each phi2 line is scanned first with the production settings (default phi1 grid,
+    L=12, distinct_tol=5e-3); lines that resolve a crossing keep exactly the old
+    behaviour. Only lines the production scan leaves empty — the endpoints of the
+    prewetting line — get a second, sturdier pass (wider/finer phi1 grid, larger
+    domain L for a diverging thick film, smaller distinctness so a near-merged
+    thin/thick pair still counts as two branches). Because the fallback fires only
+    on otherwise-empty lines, recovered endpoints never perturb the middle points.
     """
     f_left, f_right, apex_phi2 = _branches(binodal)
-    phi2_vals = np.arange(0.01, 0.85 * apex_phi2, 0.01)
+    hi = PHI2_HI_FRAC * apex_phi2
+    phi2_vals = np.arange(0.01, hi, 0.01)
     if max_lines:
         phi2_vals = phi2_vals[:max_lines]
     total = len(phi2_vals)
     tag = progress if isinstance(progress, str) else "pw"
+    diag = bool(os.environ.get("PW_DIAG"))
+    if diag:
+        ref = [round(0.01 * k, 2) for k in range(1, 10)]  # reference spans ~0.01..0.09
+        _diag(kind="range", apex_phi2=float(apex_phi2), hi=float(hi), lo=0.01, step=0.01,
+              scanned=[float(x) for x in phi2_vals],
+              ref_out_of_range=[x for x in ref if x < 0.01 or x > float(phi2_vals[-1])])
     t0 = time.perf_counter()
     n_calls = 0
     pw = []
@@ -76,24 +139,18 @@ def prewetting_line(chi, surf, binodal, progress=None, max_lines=None):
         dense = [(f_right(phi2), phi2), (0.97 * f_right(phi2), phi2)]
         grid = bl + np.arange(-0.03, 0.012, 0.0025)
         grid = grid[grid > 1e-3]
-        prev = None
-        prev_states = None  # (thin, thick) raw solver states from the last phi1
-        for phi1 in grid:
-            st = E.find_states(chi, (phi1, phi2), surf, KAPPA,
-                               dense_seeds=dense, warm=prev_states)
-            n_calls += 1
-            if len(st) >= 2:
-                prev_states = ((st[0].sol_x, st[0].sol_y),
-                               (st[-1].sol_x, st[-1].sol_y))
-                d = st[0].gamma - st[-1].gamma
-                if prev is not None and prev[1] * d < 0:
-                    p0, d0 = prev
-                    pw.append((p0 + (phi1 - p0) * (0 - d0) / (d - d0), phi2))
-                    break
-                prev = (phi1, d)
-            else:
-                prev = None
-                prev_states = None
+        cr = _scan_line(chi, surf, phi2, dense, grid, L=12.0, distinct_tol=5e-3,
+                        diag_tag=(f"default:{phi2:.3f}" if diag else None))
+        n_calls += _scan_line.n_calls
+        if cr is None:
+            # Endpoint fallback (only for lines the production scan left empty).
+            wide = bl + np.arange(-0.05, 0.03, 0.002)
+            wide = wide[wide > 1e-3]
+            cr = _scan_line(chi, surf, phi2, dense, wide, L=24.0, distinct_tol=2e-3,
+                            diag_tag=(f"fallback:{phi2:.3f}" if diag else None))
+            n_calls += _scan_line.n_calls
+        if cr is not None:
+            pw.append(cr)
         if progress:
             el = time.perf_counter() - t0
             eta = el / (i + 1) * (total - i - 1)
