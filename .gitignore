@@ -1,6 +1,6 @@
 # Reference sweep (242MB of PNGs) stays local; server uses result_cases.txt instead
 result/
-unvalidate_date/
+unvalidate_data/
 
 # Colleague's reference implementation (local study only; not ours, not shared)
 reference/
