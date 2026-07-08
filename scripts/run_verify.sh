@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 12-case verification sweep. Parallel across cases (Python stays serial).
-# Usage: bash scripts/run_verify.sh [PARALLEL]
+# Verification sweep. Parallel across cases (Python stays serial).
+# Usage: bash scripts/run_verify.sh [PARALLEL] [CASES_FILE]
 # Env: PYTHON to override the interpreter (server: /root/miniconda3/envs/numenv/bin/python).
 set -euo pipefail
 
@@ -18,7 +18,8 @@ export MPLBACKEND=Agg
 # warm the matplotlib font cache once before parallel workers import it
 "$PY" -c "import matplotlib.pyplot"
 
-CASES="$(grep -E '^[[:space:]]*-[[:space:]]' "$ROOT/config/verify_cases.yaml" | sed -E 's/^[[:space:]]*-[[:space:]]*//')"
+CASES_FILE="${2:-$ROOT/config/verify_cases.yaml}"
+CASES="$(grep -E '^[[:space:]]*-[[:space:]]' "$CASES_FILE" | sed -E 's/^[[:space:]]*-[[:space:]]*//')"
 N_CASES="$(echo "$CASES" | wc -l | tr -d ' ')"
 echo "[sweep] $N_CASES cases, parallel=$PAR"
 

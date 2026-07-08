@@ -27,8 +27,8 @@ solver:
 scan:
   phi_min: 0.0001
   phi_max: 0.2
-  n_scan: 400        # 每条迟滞线上的扫描点数
-  n_lines: 400       # 固定值方向的扫描线数
+  n_scan: 150        # 每条迟滞线上的扫描点数（对齐 prewetting_project_clean 生产档）
+  n_lines: 150       # 固定值方向的扫描线数
   amp_phi1_thin: 0.015
   amp_phi2_thin: 0.004
   amp_phi1_thick: 0.3
