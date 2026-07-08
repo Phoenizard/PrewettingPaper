@@ -1,0 +1,11 @@
+# 150 档重跑清单：verify12（400 档）中被终止的 7 个 case（进度 <85% 者，
+# 2026-07-08 用户决定改 150 档）。其余 5 个（3 done + 2 个 >=85% 跑完）保留 400 档结果。
+
+cases:
+  - chi12_0p0__chi13_2p8__chi23_2p6/om1_m0p5__om2_m0p3/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  - chi12_0p0__chi13_2p8__chi23_2p6/om1_m0p45__om2_m0p3/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  - chi12_2p3__chi13_2p8__chi23_2p6/om1_m0p40__om2_m0p40/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  - chi12_2p3__chi13_2p8__chi23_2p6/om1_m0p36__om2_m0p42/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  - chi12_2p6__chi13_2p6__chi23_2p6/om1_m0p48__om2_m0p4/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  - chi12_2p8__chi13_2p8__chi23_2p8/om1_m0p34__om2_m0p46/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  - chi12_2p8__chi13_2p8__chi23_2p8/om1_m0p40__om2_m0p36/chibb11_0p00__chibb22_0p00__chibb12_0p00

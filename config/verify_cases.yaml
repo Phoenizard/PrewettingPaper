@@ -1,0 +1,24 @@
+# 验证 case 清单：6 个 stage 各 2 个，rel 路径与 unvalidate_data/ 的 leaf 一一对应
+# （物理参数由 rel 解析；输出镜像到 out/verify/<rel>/）。
+# 选取：T-a 两例带先前基线（out/ 旧 pw_line.csv 可加比对）；T-f 一例 chibb12=0.2
+# 覆盖 f_surf 二次项路径；其余取参考图存在、omega 居中的点。
+
+cases:
+  # T-a (0.0, 2.8, 0.0)
+  - chi12_0p0__chi13_2p8__chi23_0p0/om1_m0p30__om2_m0p30/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  - chi12_0p0__chi13_2p8__chi23_0p0/om1_m0p30__om2_m0p40/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  # T-b (0.0, 2.8, 2.6)
+  - chi12_0p0__chi13_2p8__chi23_2p6/om1_m0p5__om2_m0p3/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  - chi12_0p0__chi13_2p8__chi23_2p6/om1_m0p45__om2_m0p3/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  # T-c (2.3, 2.8, 2.6)
+  - chi12_2p3__chi13_2p8__chi23_2p6/om1_m0p40__om2_m0p40/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  - chi12_2p3__chi13_2p8__chi23_2p6/om1_m0p36__om2_m0p42/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  # T-d (2.6, 2.6, 2.6)
+  - chi12_2p6__chi13_2p6__chi23_2p6/om1_m0p48__om2_m0p4/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  - chi12_2p6__chi13_2p6__chi23_2p6/om1_m0p6__om2_m0p195/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  # T-e (2.8, 2.8, 2.8)
+  - chi12_2p8__chi13_2p8__chi23_2p8/om1_m0p40__om2_m0p36/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  - chi12_2p8__chi13_2p8__chi23_2p8/om1_m0p34__om2_m0p46/chibb11_0p00__chibb22_0p00__chibb12_0p00
+  # T-f (-8.5, 0.0, 0.0)，第二例 chibb12=0.2
+  - chi12_m8p5__chi13_0p0__chi23_0p0/om1_0p25__om2_m0p345/chibb11_0p0__chibb22_0p0__chibb12_0p0
+  - chi12_m8p5__chi13_0p0__chi23_0p0/om1_0p25__om2_m0p395/chibb11_0p0__chibb22_0p0__chibb12_0p2
