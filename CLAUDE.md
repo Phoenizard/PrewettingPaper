@@ -16,16 +16,16 @@ Full model and solving condition: [doc/note/project_plan.md](doc/note/project_pl
 - Run all Python in the `numenv` conda env: `conda run -n numenv python <script>`
   (interpreter `/opt/miniconda3/envs/numenv/bin/python`). Both are pre-approved in
   `.claude/settings.local.json`. Do not use any other interpreter.
-- Not a package. The code is plain scripts plus a module directory, not an installable
-  library. Do not reintroduce `__init__.py` / `__all__` or a `prewet.`-style namespace.
-  Scripts in `scripts/` put `src/` on `sys.path` and import the modules directly
-  (`import thermo`, `import binodal`, ...). Run scripts directly.
+- Not a package (约定，供将来重写时遵循). Keep the code as plain scripts plus a module
+  directory, not an installable library. Do not introduce `__init__.py` / `__all__` or a
+  `prewet.`-style namespace. Scripts in `scripts/` should put `src/` on `sys.path` and
+  import the modules directly. Run scripts directly.
 - Writing conventions (docs and notes): no Markdown bold (`**...**`). Keep LaTeX formulas
   pure math — no Chinese (or other prose) inside a formula; label terms in prose outside
   the math instead.
 - Figures: `doc/note/figures/` is for NOTE figures only (pedagogical). Experiment /
   verification results go under `out/`, never a tmp directory. Produce phase-map / binodal
-  figures with the numerical code in `src/` (the paper's method), not by hand.
+  figures with the numerical code (the paper's method), not by hand.
 
 ## SSH compute workflow
 
@@ -43,18 +43,16 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 
 ## Layout
 
-- `src/` — model modules (plain, importable via `sys.path`): `thermo.py` (bulk + surface
-  thermodynamics), `binodal.py` (bulk binodal via lower convex hull), `equilibrium.py`
-  (§3.3 equilibrium-DE prewetting solver via `solve_bvp`), `plotting.py` (phase-map
-  rendering), `cases.py` (result/ dir-name <-> params, case iteration, output-path map).
-- Verification outputs mirror `result/` 1:1 under `out/verify/<chi_dir>/<om_dir>/<chibb_dir>/`
-  (reuse result/'s exact dir names). Per case: `overlay.png` + `pw_line.csv`; top-level
-  `out/verify/SUMMARY.csv`. Run via `scripts/verify.py` (single case, or `--all [N]`).
-- `scripts/` — runnable drivers. `binodal_check.py` computes the binodal for topologies
-  T-a..T-f and saves phase maps.
-- `doc/note/` — derivation and intro notes plus `figures/`.
+代码已清空（`src/`、`scripts/` 无任何 .py，历次实现已删；经过见 PROGRESS.md）。
+当前仓库只有文档、参考实现、数据与已跑出的结果：
+
+- `doc/note/` — derivation and intro notes plus `figures/`; `reference_method.md` 是复现
+  参考方法的自查笔记。
 - `doc/paper/` — reference paper (Omar, Adame, Arana 2020).
-- `out/`, `result/` — generated PNGs (`result/` is a pre-existing sweep to cross-check).
+- `reference/` — 同组成员可运行的参考实现（只读教材，不 import、不共享）。
+- `unvalidate_data/` — 同组成员的 pre-wetting 相图（旧名 result/，要独立复现的对照）。
+- `result_cases.txt` — 770 行三元组（chi 目录 / om 目录 / chibb 目录）case 清单。
+- `out/` — 已跑出的结果（PNG + pw_line.csv），被 .gitignore 忽略、不入 git。
 
 ## References
 
