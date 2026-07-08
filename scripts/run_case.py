@@ -25,13 +25,20 @@ def main():
     ap.add_argument("--config", default=str(ROOT / "config" / "base.yaml"))
     ap.add_argument("--out-root", default=str(ROOT / "out"))
     ap.add_argument("--max-lines", type=int, default=None)
+    ap.add_argument("--line-workers", type=int, default=1,
+                    help="case 内摊线进程数（线间独立，结果逐点不变）")
     args = ap.parse_args()
 
     cfg = params.load_config(args.config)
     cfg = params.apply_case(cfg, params.parse_case_rel(args.case_rel))
     print(f"[case] {args.case_rel}", flush=True)
     print(f"[params] {cfg.physical}", flush=True)
-    pipeline.run_case(cfg, Path(args.out_root) / args.case_rel, max_lines=args.max_lines)
+    pipeline.run_case(
+        cfg,
+        Path(args.out_root) / args.case_rel,
+        max_lines=args.max_lines,
+        line_workers=args.line_workers,
+    )
 
 
 if __name__ == "__main__":
