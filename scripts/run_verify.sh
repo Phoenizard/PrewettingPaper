@@ -7,6 +7,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PY="${PYTHON:-python}"
 PAR="${1:-12}"
+# one launch = one timestamp shared by the sweep log and all per-case logs;
+# log/ is flat: log/<stamp>-verify[-<qualifier>].log
+STAMP="${STAMP:-$(date +%Y%m%d-%H%M)}"
 
 # one BLAS thread per worker; workers provide the parallelism
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
@@ -19,18 +22,19 @@ CASES="$(grep -E '^[[:space:]]*-[[:space:]]' "$ROOT/config/verify_cases.yaml" | 
 N_CASES="$(echo "$CASES" | wc -l | tr -d ' ')"
 echo "[sweep] $N_CASES cases, parallel=$PAR"
 
-export ROOT PY
+export ROOT PY STAMP
+mkdir -p "$ROOT/log"
 echo "$CASES" | xargs -P "$PAR" -I{} bash -c '
   rel="{}"
   out="$ROOT/out/$rel"
-  log_dir="$ROOT/log/verify/$rel"
-  mkdir -p "$out" "$log_dir"
+  log_file="$ROOT/log/$STAMP-verify-${rel//\//+}.log"
+  mkdir -p "$out"
   echo "[start] $rel"
-  if "$PY" "$ROOT/scripts/run_case.py" --case-rel "$rel" >"$log_dir/run.log" 2>&1 \
-     && "$PY" "$ROOT/scripts/plot_case.py" --case-dir "$out" >>"$log_dir/run.log" 2>&1; then
+  if "$PY" "$ROOT/scripts/run_case.py" --case-rel "$rel" >"$log_file" 2>&1 \
+     && "$PY" "$ROOT/scripts/plot_case.py" --case-dir "$out" >>"$log_file" 2>&1; then
     echo "[done] $rel"
   else
-    echo "[FAIL] $rel (see $log_dir/run.log)"
+    echo "[FAIL] $rel (see $log_file)"
   fi
 '
 
