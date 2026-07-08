@@ -23,7 +23,7 @@ export ROOT PY
 echo "$CASES" | xargs -P "$PAR" -I{} bash -c '
   rel="{}"
   out="$ROOT/out/verify/$rel"
-  log_dir="$ROOT/out/logs/verify/$rel"
+  log_dir="$ROOT/log/verify/$rel"
   mkdir -p "$out" "$log_dir"
   echo "[start] $rel"
   if "$PY" "$ROOT/scripts/run_case.py" --case-rel "$rel" >"$log_dir/run.log" 2>&1 \
