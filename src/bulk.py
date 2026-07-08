@@ -14,6 +14,7 @@ import numpy as np
 from scipy.spatial import ConvexHull
 
 import model
+from logutil import log
 
 
 def compute_demixed_map(p, bulk_cfg):
@@ -26,26 +27,33 @@ def compute_demixed_map(p, bulk_cfg):
     x = phi1_grid[mask].ravel()
     y = phi2_grid[mask].ravel()
     f = model.free_energy(x, y, p)
+    log(f"[demixed] grid {n_grid}x{n_grid} -> {len(x)} points, hull start")
 
     try:
         hull = ConvexHull(np.column_stack([x, y, f]))
     except Exception:
+        log("[demixed] hull failed -> empty map")
         return {"x": x, "y": y, "demixed": np.zeros_like(x, dtype=bool)}
 
     eq = hull.equations
     lower = eq[:, 2] < -1e-12
+    log(f"[demixed] hull done, {int(lower.sum())} lower facets, envelope eval start")
     if not np.any(lower):
         return {"x": x, "y": y, "demixed": np.zeros_like(x, dtype=bool)}
 
     nx_l, ny_l, nz_l, d_l = eq[lower, 0], eq[lower, 1], eq[lower, 2], eq[lower, 3]
     z_env = np.full_like(f, -np.inf, dtype=float)
     batch = 2000
-    for i in range(0, len(x), batch):
+    n_batch = (len(x) + batch - 1) // batch
+    for bi, i in enumerate(range(0, len(x), batch)):
         j = min(i + batch, len(x))
         planes = -(nx_l[:, None] * x[i:j] + ny_l[:, None] * y[i:j] + d_l[:, None]) / nz_l[:, None]
         z_env[i:j] = np.max(planes, axis=0)
+        if (bi + 1) % 10 == 0 or (bi + 1) == n_batch:
+            log(f"[demixed] envelope batch {bi + 1}/{n_batch}")
 
     demixed = (f - z_env) > float(bulk_cfg.demix_tol)
+    log(f"[demixed] done, {int(demixed.sum())}/{len(x)} points demixed")
     return {"x": x, "y": y, "demixed": demixed.astype(bool)}
 
 
@@ -96,6 +104,7 @@ def compute_binodal_points(p, bulk_cfg, vertex_jump_threshold=25):
     """Binodal point set via lower convex envelope + vertex-index jumps."""
     phi1, phi2 = _regular_grid(int(bulk_cfg.binodal_grid))
     f = model.free_energy(phi1, phi2, p)
+    log(f"[binodal] grid -> {len(phi1)} points, hull start (may take minutes)")
 
     n_extra = 3
     max_f = float(np.max(f)) + 1000.0
@@ -110,7 +119,9 @@ def compute_binodal_points(p, bulk_cfg, vertex_jump_threshold=25):
     try:
         convex = ConvexHull(pts, incremental=True)
     except Exception:
+        log("[binodal] hull failed -> no binodal points")
         return []
+    log(f"[binodal] hull done, {len(convex.vertices)} vertices")
 
     hull_vertices = convex.vertices
     if len(hull_vertices) > n_extra:
@@ -132,4 +143,6 @@ def compute_binodal_points(p, bulk_cfg, vertex_jump_threshold=25):
                 bc_y0.append(rho_2)
             bc_x1.append(float(phi1[idx_j]))
             bc_y1.append(float(phi2[idx_j]))
-    return list(zip(bc_x0 + bc_x1, bc_y0 + bc_y1))
+    points = list(zip(bc_x0 + bc_x1, bc_y0 + bc_y1))
+    log(f"[binodal] done, {len(points)} binodal points")
+    return points

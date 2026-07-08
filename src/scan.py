@@ -20,7 +20,10 @@ refinement, free-volume scaling of the initial guess.
 
 import numpy as np
 
+from logutil import log
+
 _EPS = 1e-12
+_LOG_EVERY = 50  # per-point loop progress interval inside a branch sweep
 
 
 def _sign_from_wall(omega):
@@ -54,13 +57,14 @@ def branch_guess(p, scan_cfg, mode):
     return np.concatenate([p1, p2])
 
 
-def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode):
+def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode, label=""):
     """One directional sweep. Mutates solver.p.<sweep_attr> point by point."""
     p = solver.p
     n = len(values)
     omega = np.full(n, np.nan)
     cs = np.full(n, np.nan)
     seed = None
+    fails = 0
     for i, val in enumerate(values):
         setattr(p, sweep_attr, float(val))
         U0 = seed if seed is not None else branch_guess(p, scan_cfg, mode)
@@ -70,19 +74,25 @@ def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode):
             om, cs1, cs2 = solver.surface_metrics(U)
             omega[i] = om
             cs[i] = cs1 + cs2
+        else:
+            fails += 1
+        if (i + 1) % _LOG_EVERY == 0 or (i + 1) == n:
+            log(f"{label} {mode} sweep {i + 1}/{n}, fails={fails}")
     return omega, cs
 
 
-def hysteresis_line(solver, scan_cfg, sweep_attr):
+def hysteresis_line(solver, scan_cfg, sweep_attr, label=""):
     """Bidirectional scan of solver.p.<sweep_attr> ('phi1_inf' or 'phi2_inf').
 
     Returns dict with scan values and per-branch Omega / total cs arrays.
     """
     values = np.linspace(scan_cfg.phi_min, scan_cfg.phi_max, int(scan_cfg.n_scan))
 
-    omega_thin, cs_thin = _sweep_branch(solver, scan_cfg, sweep_attr, values, "thin")
+    omega_thin, cs_thin = _sweep_branch(
+        solver, scan_cfg, sweep_attr, values, "thin", label=label
+    )
     omega_thick_rev, cs_thick_rev = _sweep_branch(
-        solver, scan_cfg, sweep_attr, values[::-1], "thick"
+        solver, scan_cfg, sweep_attr, values[::-1], "thick", label=label
     )
     return {
         "values": values,
