@@ -22,7 +22,7 @@ echo "[sweep] $N_CASES cases, parallel=$PAR"
 export ROOT PY
 echo "$CASES" | xargs -P "$PAR" -I{} bash -c '
   rel="{}"
-  out="$ROOT/out/verify/$rel"
+  out="$ROOT/out/$rel"
   log_dir="$ROOT/log/verify/$rel"
   mkdir -p "$out" "$log_dir"
   echo "[start] $rel"

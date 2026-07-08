@@ -23,7 +23,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case-rel", required=True)
     ap.add_argument("--config", default=str(ROOT / "config" / "base.yaml"))
-    ap.add_argument("--out-root", default=str(ROOT / "out" / "verify"))
+    ap.add_argument("--out-root", default=str(ROOT / "out"))
     ap.add_argument("--max-lines", type=int, default=None)
     args = ap.parse_args()
 

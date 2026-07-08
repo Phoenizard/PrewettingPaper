@@ -1,4 +1,4 @@
-"""Aggregate out/verify/**/pw_line.csv into out/verify/SUMMARY.csv.
+"""Aggregate out/<chi>/<om>/<chibb>/pw_line.csv into out/SUMMARY.csv.
 
 One row per case: point counts per direction and covered ranges.
 """
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    verify_root = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "out" / "verify"
+    verify_root = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "out"
     rows = []
     for pw_path in sorted(verify_root.glob("*/*/*/pw_line.csv")):
         rel = pw_path.parent.relative_to(verify_root)
