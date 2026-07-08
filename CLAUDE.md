@@ -11,6 +11,71 @@ preferential rigid wall: does it nucleate a thin -> thick pre-wetting film, and 
 
 Full model and solving condition: [doc/note/project_plan.md](doc/note/project_plan.md).
 
+## Model: Gibbs surface free energy gamma
+
+Fields: phi_1(z), phi_2(z) on z in [0, inf); solvent phi_s(z) = 1 - phi_1(z) - phi_2(z).
+Far-field (z -> inf) reservoir composition phi_{1,inf}, phi_{2,inf}. Surface values phi_i(0).
+
+Bulk free energy density:
+
+$$
+f_b(\phi_1,\phi_2) = \frac{k_B T}{\nu}\Big[
+\frac{\phi_1}{n_1}\ln\phi_1 + \frac{\phi_2}{n_2}\ln\phi_2 + \phi_s\ln\phi_s
++ \chi_{13}\,\phi_1\phi_s + \chi_{23}\,\phi_2\phi_s + \chi_{12}\,\phi_1\phi_2 \Big]
+$$
+
+Grand-potential density (zero and minimal at phi_i = phi_{i,inf}), with
+mu_{i,inf} = nu_i (partial f_b / partial phi_i) evaluated at the reservoir:
+
+$$
+W(\phi_1,\phi_2) = f_b(\phi_1,\phi_2) - f_b(\phi_{1,\infty},\phi_{2,\infty})
+- \sum_{i=1,2}\frac{\mu_{i,\infty}}{\nu_i}\,(\phi_i - \phi_{i,\infty})
+$$
+
+Surface interaction energy (depends only on the wall-contact values phi_i(0)):
+
+$$
+f_{\text{surf}}(\phi_1(0),\phi_2(0)) = \frac{k_B T}{\bar\nu}\Big[
+\omega_1\,\phi_1(0) + \omega_2\,\phi_2(0)
++ \chi_{bb,11}\,\phi_1(0)^2 + \chi_{bb,22}\,\phi_2(0)^2 + \chi_{bb,12}\,\phi_1(0)\phi_2(0) \Big]
+$$
+
+Gibbs surface free energy (the output target):
+
+$$
+\gamma[\phi_1,\phi_2] = \int_0^\infty dz\Big[
+W(\phi_1(z),\phi_2(z)) + \tfrac{1}{2}\kappa_1(\partial_z\phi_1)^2 + \tfrac{1}{2}\kappa_2(\partial_z\phi_2)^2
+\Big] + f_{\text{surf}}(\phi_1(0),\phi_2(0))
+$$
+
+Parameter roles:
+- chi12, chi13, chi23: bulk Flory-Huggins interactions — chi12 solute1-solute2, chi13 solute1-solvent, chi23 solute2-solvent. They set the bulk phase topology (which stage / T-a..T-f).
+- omega1, omega2 (wall affinity of solute 1, 2) and chibb11, chibb22, chibb12 (surface-enhanced interactions) enter only f_surf, i.e. the wall boundary condition.
+- n1, n2 solute-to-solvent size ratios; kappa1, kappa2 gradient penalties; nu, nubar, kBT scales.
+Derivation: [doc/note/ternary.md](doc/note/ternary.md).
+
+## Control variables and their value sets
+
+A case = one (chi topology) x (omega1, omega2) x (chibb11, chibb22, chibb12) point.
+Value sets below are the union measured across all 6 stages in `unvalidate_data/`; a given
+stage samples only a subset (older stages a regular 11x11 omega grid; newer T-b/T-d/T-f
+scan finer / freer points). Encoding in dir names: `_p_` = decimal point, `_m_` = minus.
+
+- chi (chi12, chi13, chi23) — 6 topologies (stage dirs):
+  - T-a: (0.0, 2.8, 0.0)
+  - T-b: (0.0, 2.8, 2.6)
+  - T-c: (2.3, 2.8, 2.6)
+  - T-d: (2.6, 2.6, 2.6)
+  - T-e: (2.8, 2.8, 2.8)
+  - T-f: (-8.5, 0.0, 0.0)
+- omega1: range [-1.2, 0.28] (union 64 values; older stages step 0.02 over -0.50..-0.30).
+- omega2: range [-1.2, 0.28] (union 66 values; older stages step 0.02 over -0.50..-0.30).
+- chibb11: {-0.10, -0.08, -0.06, -0.05, -0.04, -0.025, -0.02, 0, 0.02, 0.025, 0.04, 0.05, 0.06, 0.08, 0.10}.
+- chibb22: same set as chibb11.
+- chibb12: {-1.0, -0.9, ..., -0.1} plus {-0.08, -0.06, -0.05, -0.04, -0.02, 0, 0.02, 0.04, 0.05, 0.06, 0.08} plus {0.1, 0.2, ..., 0.9}.
+Most cases hold chibb = (0, 0, 0) and scan only omega; the chibb sets above appear mainly in
+the chibb-sweep stage (T-f, from chi_m8500_chibb_sweep).
+
 ## Rules
 
 - Run all Python in the `numenv` conda env: `conda run -n numenv python <script>`
