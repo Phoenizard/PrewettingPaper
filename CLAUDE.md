@@ -127,7 +127,7 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
   外加各分析 topic 的脚本）。
 - `config/` — 单一 yaml 参数源。
 - `doc/analysis/` — 数据分析阶段的记录：`topiclist.md` 是 4 个 topic 的索引，
-  每个 topic 一个 note 加 `figures/`。
+  每个 topic 一个 note。图不进 doc/analysis/，留在 `out/`。
 - `doc/note/` — derivation and intro notes plus `figures/`; `reference_method.md` 是复现
   参考方法的自查笔记。
 - `doc/paper/` — reference paper (Omar, Adame, Arana 2020).
