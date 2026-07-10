@@ -6,8 +6,20 @@ Guidance for working in this repository. Keep this file short; link out instead 
 
 Pre-wetting in a ternary mixture (solvent + solute 1 + solute 2) against a chemically
 preferential rigid wall: does it nucleate a thin -> thick pre-wetting film, and where in the
-`(phi_1_inf, phi_2_inf)` plane. Core goal is to VERIFY someone else's results in `result/`
-(their pre-wetting phase maps) with our own independent code — not to explore freely.
+`(phi_1_inf, phi_2_inf)` plane.
+
+Current phase: DATA ANALYSIS. The verification phase is over — our independent code was
+judged to reproduce the reference results in `data/` correctly. The goal now is to explore
+the physical meaning of how the parameters affect pre-wetting, to serve the paper. Target is
+a physics journal, so the model and the numerics do not go in the main text.
+
+The four analysis topics (one per control variable group) are in
+[doc/analysis/topiclist.md](doc/analysis/topiclist.md); each gets its own note under
+`doc/analysis/`. Still in the initial exploration stage — the observables are not yet
+pinned down. Observable framing: pre-wetting has two independent dimensions, strength
+(the jump in surface excess between thin and thick branch, not readable off a 2D phase
+map, set aside) and extent (how much of the `(phi_1_inf, phi_2_inf)` plane it occupies,
+measured by the length of the pre-wetting line and its distance to the binodal).
 
 Full model and solving condition: [doc/note/project_plan.md](doc/note/project_plan.md).
 
@@ -57,7 +69,7 @@ Derivation: [doc/note/ternary.md](doc/note/ternary.md).
 ## Control variables and their value sets
 
 A case = one (chi topology) x (omega1, omega2) x (chibb11, chibb22, chibb12) point.
-Value sets below are the union measured across all 6 stages in `unvalidate_data/`; a given
+Value sets below are the union measured across all 6 stages in `data/`; a given
 stage samples only a subset (older stages a regular 11x11 omega grid; newer T-b/T-d/T-f
 scan finer / freer points). Encoding in dir names: `_p_` = decimal point, `_m_` = minus.
 
@@ -108,21 +120,29 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 
 ## Layout
 
-代码已清空（`src/`、`scripts/` 无任何 .py，历次实现已删；经过见 PROGRESS.md）。
-当前仓库只有文档、参考实现、数据与已跑出的结果：
-
+- `src/` — 七个模型模块（params/model/solver/scan/bulk/pipeline/plotting，含 logutil），
+  外加 `pwpix.py`（从对照 overlay PNG 颜色无关提取 pre-wetting 线像素；对照侧只有图、
+  无数值 CSV，故需像素提取）。
+- `scripts/` — 直接运行的脚本（run_case / plot_case / build_summary / run_verify.sh，
+  外加各分析 topic 的脚本）。
+- `config/` — 单一 yaml 参数源。
+- `doc/analysis/` — 数据分析阶段的记录：`topiclist.md` 是 4 个 topic 的索引，
+  每个 topic 一个 note 加 `figures/`。
 - `doc/note/` — derivation and intro notes plus `figures/`; `reference_method.md` 是复现
   参考方法的自查笔记。
 - `doc/paper/` — reference paper (Omar, Adame, Arana 2020).
 - `reference/` — 同组成员可运行的参考实现（只读教材，不 import、不共享）。
-- `unvalidate_data/` — 同组成员的 pre-wetting 相图（旧名 result/，要独立复现的对照）。
+- `data/` — 同组成员的 pre-wetting 相图（旧名 result/、unvalidate_data/）。已验真为真，
+  现为分析阶段的数据源。每个 case 只有 PNG，无数值 CSV。
 - `result_cases.txt` — 770 行三元组（chi 目录 / om 目录 / chibb 目录）case 清单。
 - `out/` — 已跑出的结果（PNG + pw_line.csv），被 .gitignore 忽略、不入 git。
 
 ## References
 
 - [PROGRESS.md](PROGRESS.md) — running progress log (current status, next steps, dated
-  entries); update it as verification advances.
+  entries); update it as the analysis advances.
+- [doc/analysis/topiclist.md](doc/analysis/topiclist.md) — the 4 analysis topics, one per
+  control-variable group; index into the per-topic notes.
 - [doc/note/project_plan.md](doc/note/project_plan.md) — goals, control-variable structure,
   the 6 topologies, the E1-E5 surface-experiment matrix.
 - [doc/note/ternary.md](doc/note/ternary.md) — model: `f_b`, `W`, `f_surf`, the Gibbs
