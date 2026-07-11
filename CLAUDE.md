@@ -104,6 +104,14 @@ the chibb-sweep stage (T-f, from chi_m8500_chibb_sweep).
   verification results go under `out/`, never a tmp directory. Produce phase-map / binodal
   figures with the numerical code (the paper's method), not by hand.
 
+## SSH data-access machine (fixed)
+
+`ssh -p 23472 root@connect.westb.seetacloud.com` — passwordless, address long-lived
+(not expected to change). Purpose: data access and reading ONLY, no compute. It mounts the
+shared storage container at `/root/autodl-fs/pw-space`, where teammates upload experiment
+data per [doc/data_format.md](doc/data_format.md). Distinct from the per-session compute
+box below.
+
 ## SSH compute workflow
 
 Each session the user provides an SSH link (e.g. `ssh -p 32829 root@connect.cqa1.seetacloud.com`) —
