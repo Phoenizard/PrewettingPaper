@@ -106,7 +106,7 @@ def main():
     args = ap.parse_args()
 
     if args.case_dir:
-        from params import parse_case_rel
+        from cases import parse_case_rel
         case_dir = Path(args.case_dir)
         # rel is the last three path components (chi/om/chibb).
         rel = "/".join(case_dir.parts[-3:])
