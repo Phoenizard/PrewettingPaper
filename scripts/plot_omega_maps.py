@@ -54,9 +54,9 @@ def _grid(rows, field):
     return np.array(om1), np.array(om2), grid
 
 
-def _heatmap(ax, om1, om2, grid, title, cbar_label):
+def _heatmap(ax, om1, om2, grid, title, cbar_label, cmap="viridis"):
     ax.set_facecolor("white")
-    im = ax.pcolormesh(om1, om2, grid, shading="nearest", cmap="viridis")
+    im = ax.pcolormesh(om1, om2, grid, shading="nearest", cmap=cmap)
     ax.set_xlabel(r"$\omega_1$")
     ax.set_ylabel(r"$\omega_2$")
     ax.set_title(title, fontsize=10)
@@ -77,12 +77,18 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
 
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
+    # Both panels are oriented so that the BRIGHT region is the same corner
+    # (weak-omega_1) in both: for L, bright = large (long line); for d-bar the
+    # colormap is reversed (viridis_r) so bright = small d-bar (line hugs the
+    # binodal). The reader looks at the bright end in both panels; there is no
+    # need to switch attention between dark and light across the two.
     om1, om2, gl = _grid(rows, "pw_length")
     _heatmap(axes[0], om1, om2, gl,
-             r"pre-wetting line length $L$", r"$L$")
+             r"line length $L$ (bright = longer line)", r"$L$")
     om1, om2, gd = _grid(rows, "dist_mean")
     _heatmap(axes[1], om1, om2, gd,
-             r"distance to binodal $\bar d$", r"$\bar d$")
+             r"distance to binodal $\bar d$ (bright = hugs binodal)",
+             r"$\bar d$", cmap="viridis_r")
     fig.suptitle(f"omega topic ({args.stage}, chibb=0)", fontsize=11)
     fig.tight_layout()
     out = out_dir / "omega_length_dist.png"
