@@ -63,7 +63,9 @@ def render_case(case_dir, params, residual_threshold, out_name):
     fig, ax = plt.subplots(figsize=(5, 5))
     if binodal:
         bx, by = zip(*binodal)
-        ax.plot(bx, by, lw=1.0, color=BINODAL_COLOR, label="binodal")
+        # scatter, not plot: binodal points are not path-ordered and may form
+        # several disjoint loops; connecting them with a line draws false edges.
+        ax.scatter(bx, by, s=2, color=BINODAL_COLOR, label="binodal", linewidths=0)
 
     if pts:
         labels = geom.split_branches(pts)
