@@ -124,8 +124,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case-dir", help="render a single case directory")
     ap.add_argument("--data-root", help="render every case under this data root")
-    ap.add_argument("--gap-tol", type=float, default=0.01,
-                    help="MST edges longer than this are drawn as gaps (dashed)")
+    ap.add_argument("--gap-tol", type=float, default=0.015,
+                    help="MST edges longer than this are drawn as gaps (dashed); "
+                         "0.015 calibrated on the omega topic")
     ap.add_argument("--out-name", default="measure_map.png")
     args = ap.parse_args()
 

@@ -140,8 +140,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--gap-tol", type=float, default=0.01,
-                    help="cut MST edges longer than this (segment separators)")
+    ap.add_argument("--gap-tol", type=float, default=0.015,
+                    help="cut MST edges longer than this (segment separators); "
+                         "0.015 calibrated on the omega topic: ~10x the natural "
+                         "in-line point spacing (~0.0014), below the 0.02 grid step")
     ap.add_argument("--residual-threshold", type=float, default=0.003)
     args = ap.parse_args()
 
