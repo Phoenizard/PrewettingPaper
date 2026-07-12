@@ -1,11 +1,13 @@
 """Render a research-grade phase map per case: binodal + pre-wetting line.
 
-Style (agreed): clean paper style, white background; binodal as one thin grey
-line; pre-wetting points as small solid dots; the two scan directions
-(fix_phi1, fix_phi2) are NOT distinguished (same line, same marker); points are
-coloured by branch ONLY when the case is multi-branch, otherwise a single
-colour. Parameters go in the title (LaTeX). Axes are the raw
-(phi1_inf, phi2_inf) plane, [0,1] x [0,1], aspect equal.
+Style (agreed): clean paper style, white background; binodal as thin grey
+scatter; pre-wetting points as small solid dots (the two scan directions
+fix_phi1/fix_phi2 are NOT distinguished). The minimum spanning tree over the
+points is overlaid: solid blue edges are the segment arclength that makes up
+pw_length; dashed red edges are the gaps (MST edges longer than gap_tol, cut and
+excluded from pw_length). A corner note shows L (pw_length), d-bar (dist_mean),
+and seg (n_segments). No branch splitting. Parameters go in the title (LaTeX).
+Axes are the raw (phi1_inf, phi2_inf) plane, [0,1] x [0,1], aspect equal.
 
 The rendered PNG is written back into each case directory (measure_map.png),
 so it lives next to the case's CSVs as a paper asset and a visual-inspection aid.
@@ -13,7 +15,7 @@ so it lives next to the case's CSVs as a paper asset and a visual-inspection aid
 Usage:
   python scripts/plot_all_cases.py --case-dir <one case dir>            # single
   python scripts/plot_all_cases.py --data-root <pw-space/data>          # all
-      [--residual-threshold 0.003] [--out-name measure_map.png]
+      [--gap-tol 0.01] [--out-name measure_map.png]
 """
 
 import argparse
@@ -29,11 +31,17 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import numpy as np
+from scipy.spatial.distance import pdist, squareform
+from scipy.sparse.csgraph import minimum_spanning_tree
+
 import geom
 from cases import iter_cases
 
-SINGLE_COLOR = "#1f3b73"  # deep blue for single-branch pre-wetting points
+SINGLE_COLOR = "#1f3b73"  # deep blue for pre-wetting points
 BINODAL_COLOR = "0.6"
+MST_COLOR = "#1f3b73"     # segment edges (arclength contributing to pw_length)
+GAP_COLOR = "#c02a2a"     # cut bridge edges (gaps, excluded from pw_length)
 
 
 def _read_csv_rows(path):
@@ -55,7 +63,7 @@ def _title(params):
     )
 
 
-def render_case(case_dir, params, residual_threshold, out_name):
+def render_case(case_dir, params, gap_tol, out_name):
     case_dir = Path(case_dir)
     binodal = [(float(a), float(b)) for a, b in _read_csv_rows(case_dir / "binodal.csv")]
     pts = [(float(r[1]), float(r[2])) for r in _read_csv_rows(case_dir / "pw_line.csv")]
@@ -68,22 +76,35 @@ def render_case(case_dir, params, residual_threshold, out_name):
         ax.scatter(bx, by, s=2, color=BINODAL_COLOR, label="binodal", linewidths=0)
 
     if pts:
-        labels = geom.split_branches(pts)
-        n_branch = int(labels.max()) + 1 if len(labels) else 0
-        rms = geom.residual_rms(pts) if len(pts) >= 3 else 0.0
-        multi = n_branch > 1 or rms > residual_threshold
-        xs, ys = zip(*pts)
-        if multi:
-            cmap = plt.get_cmap("viridis")
-            ncol = max(n_branch, 1)
-            for bid in range(ncol):
-                sel = [i for i, b in enumerate(labels) if b == bid]
-                if sel:
-                    ax.scatter([xs[i] for i in sel], [ys[i] for i in sel],
-                               s=12, color=cmap(bid / max(ncol - 1, 1)),
-                               label=f"PW branch {bid}")
-        else:
-            ax.scatter(xs, ys, s=12, color=SINGLE_COLOR, label="pre-wetting")
+        parr = np.asarray(pts, dtype=float)
+        xs, ys = parr[:, 0], parr[:, 1]
+        ax.scatter(xs, ys, s=10, color=SINGLE_COLOR, zorder=3,
+                   label="pre-wetting")
+
+        # Overlay the MST: kept edges (<= gap_tol) are the arclength that makes
+        # up pw_length; cut edges (> gap_tol) are gaps between segments.
+        length = dist_mean = None
+        n_segments = 0
+        if len(parr) >= 2:
+            length, n_segments, _gap, _full = geom.mst_length(parr, gap_tol)
+            mst = minimum_spanning_tree(squareform(pdist(parr))).tocoo()
+            for i, j, w in zip(mst.row, mst.col, mst.data):
+                seg = w <= gap_tol
+                ax.plot([xs[i], xs[j]], [ys[i], ys[j]],
+                        color=MST_COLOR if seg else GAP_COLOR,
+                        lw=1.0 if seg else 0.8,
+                        ls="-" if seg else "--", zorder=2)
+        if binodal:
+            d = geom.min_dist_to_set(parr, binodal)
+            dist_mean = float(d.mean())
+        note = []
+        if length is not None:
+            note.append(rf"$L={length:.3f}$")
+        if dist_mean is not None:
+            note.append(rf"$\bar d={dist_mean:.3f}$")
+        note.append(rf"seg$={n_segments}$")
+        ax.text(0.03, 0.97, "  ".join(note), transform=ax.transAxes,
+                fontsize=8, va="top", ha="left")
 
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
@@ -103,7 +124,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--case-dir", help="render a single case directory")
     ap.add_argument("--data-root", help="render every case under this data root")
-    ap.add_argument("--residual-threshold", type=float, default=0.003)
+    ap.add_argument("--gap-tol", type=float, default=0.01,
+                    help="MST edges longer than this are drawn as gaps (dashed)")
     ap.add_argument("--out-name", default="measure_map.png")
     args = ap.parse_args()
 
@@ -113,7 +135,7 @@ def main():
         # rel is the last three path components (chi/om/chibb).
         rel = "/".join(case_dir.parts[-3:])
         params = parse_case_rel(rel)
-        out = render_case(case_dir, params, args.residual_threshold, args.out_name)
+        out = render_case(case_dir, params, args.gap_tol, args.out_name)
         print(f"wrote {out}")
         return
 
@@ -123,7 +145,7 @@ def main():
     n = 0
     for case in iter_cases(args.data_root):
         render_case(case.pw_path.parent, case.params,
-                    args.residual_threshold, args.out_name)
+                    args.gap_tol, args.out_name)
         n += 1
         if n % 100 == 0:
             print(f"  rendered {n} cases")

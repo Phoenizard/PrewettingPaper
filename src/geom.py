@@ -12,6 +12,8 @@ length, distance-to-binodal, straight-line residual, and a branch split.
 
 import numpy as np
 from scipy.spatial import cKDTree
+from scipy.spatial.distance import pdist, squareform
+from scipy.sparse.csgraph import minimum_spanning_tree, connected_components
 
 
 def _as_points(points):
@@ -80,6 +82,57 @@ def residual_rms(points, line=None):
     perp = centred - proj
     d = np.linalg.norm(perp, axis=1)
     return float(np.sqrt(np.mean(d ** 2)))
+
+
+def mst_length(points, gap_tol=None):
+    """Length of the pre-wetting point set as a bend-robust curve arclength.
+
+    Builds a Euclidean minimum spanning tree over all points (the two scan
+    directions merged, no branch split), then cuts every edge longer than
+    ``gap_tol``. Those long edges bridge genuine gaps between separated clusters;
+    the surviving edges tile each cluster's curve once. Unlike a single-line PCA
+    span, this follows a bent or L-shaped line point-to-point and is not biased
+    by point density (each stretch of curve is covered by one chain of edges).
+
+    Returns ``(length, n_segments, gap_total, full_length)``:
+      length      sum of surviving edge weights = arclength within clusters,
+                  gaps excluded. This is the headline pre-wetting-line length.
+      n_segments  number of connected components after the cut (clusters/segments).
+      gap_total   sum of the cut (bridging) edge weights = total gap length; a
+                  diagnostic for whether two lines are pulling apart.
+      full_length sum of ALL MST edge weights (no cut) = extent including gaps; a
+                  comparison value for judging whether the gap carries meaning.
+
+    With ``gap_tol=None`` nothing is cut: length == full_length, n_segments == 1,
+    gap_total == 0. For < 2 points everything is 0 / n_segments = len(points).
+    """
+    pts = _as_points(points)
+    n = len(pts)
+    if n < 2:
+        return 0.0, n, 0.0, 0.0
+
+    # MST edge weights on the full Euclidean distance matrix.
+    dmat = squareform(pdist(pts))
+    mst = minimum_spanning_tree(dmat)          # sparse upper-triangular
+    edges = mst.tocoo()
+    weights = edges.data
+    full_length = float(weights.sum())
+
+    if gap_tol is None:
+        return full_length, 1, 0.0, full_length
+
+    keep = weights <= gap_tol
+    length = float(weights[keep].sum())
+    gap_total = float(weights[~keep].sum())
+
+    # Segments = connected components of the MST after dropping the long edges.
+    rows = edges.row[keep]
+    cols = edges.col[keep]
+    kept = np.zeros((n, n), dtype=float)
+    kept[rows, cols] = weights[keep]
+    n_segments, _ = connected_components(kept, directed=False)
+
+    return length, int(n_segments), gap_total, full_length
 
 
 def min_dist_to_set(points, target):

@@ -5,22 +5,33 @@ row each. Each analysis angle (omega, chibb12, chibb11/22, chi) filters this
 table by its own parameters. Rigorous conclusions are drawn on single-branch
 cases only; multi-branch cases are flagged (is_single = 0) for separate study.
 
-Measures per case, all in the raw (phi1_inf, phi2_inf) plane (no rescaling):
-  length      projection span of the pre-wetting points on their best-fit line
-  dist_mean   mean over points of shortest distance to the binodal
-  dist_max    max  over points of shortest distance to the binodal
-  residual_rms  RMS perpendicular distance to the best-fit line (kink indicator)
+Headline measures (paper), raw (phi1_inf, phi2_inf) plane, no rescaling:
+  pw_length   total pre-wetting-line length = MST arclength within clusters,
+              gaps excluded (bend-robust; replaces the old PCA single-line span)
+  dist_mean   mean over points of shortest distance to the binodal (typical depth
+              into the one-phase region)
+
+Diagnostics:
   n_points    number of pre-wetting points (fix_phi1 + fix_phi2 merged)
-  n_branch    branch count from split_branches
-  is_single   1 if single-branch (n_branch == 1 and residual within threshold)
+  n_segments  connected components after cutting MST edges > gap_tol (clusters)
+  gap_total   summed length of the cut bridge edges (how far segments pull apart)
+  full_length MST arclength WITHOUT the cut (extent including gaps); vs pw_length
+              this says whether the gap carries physical meaning
+  dist_max    max shortest distance to the binodal (deepest reach)
+  dist_min    min shortest distance to the binodal (closest hug)
+  residual_rms  RMS perpendicular distance to the best-fit line (straightness)
+  pca_span    old PCA single-line span, kept to show why MST wins on bent lines
+  n_branch    split_branches count (unreliable; informational only)
+  is_single   informational only; conclusions use the merged whole, no filtering
 
 Usage:
   python scripts/extract_measures.py --data-root <pw-space/data> \
       --out <analysis/prewetting_measures/measures.csv> \
-      [--residual-threshold 0.003]
+      [--gap-tol 0.01] [--residual-threshold 0.003]
 
-The residual threshold defaults to a placeholder; calibrate it from the actual
-residual distribution (see the calibration step) before drawing conclusions.
+gap_tol cuts MST edges longer than it (segment separators); it must exceed the
+natural inter-point spacing of a single scan line or a straight line fragments.
+Calibrate it from the actual point spacing before drawing conclusions.
 """
 
 import argparse
@@ -39,8 +50,12 @@ FIELDS = [
     "chi_12", "chi_13", "chi_23",
     "omega_1", "omega_2",
     "chi_bb_11", "chi_bb_22", "chi_bb_12",
-    "n_points", "n_branch", "is_single",
-    "residual_rms", "length", "dist_mean", "dist_max",
+    # headline
+    "pw_length", "dist_mean",
+    # diagnostics
+    "n_points", "n_segments", "gap_total", "full_length",
+    "dist_max", "dist_min", "residual_rms", "pca_span",
+    "n_branch", "is_single",
     "flag",
 ]
 
@@ -62,7 +77,7 @@ def _load_binodal(binodal_path):
     return [(float(r[0]), float(r[1])) for r in _read_csv_rows(binodal_path)]
 
 
-def measure_case(case, residual_threshold):
+def measure_case(case, residual_threshold, gap_tol):
     """Compute the measure row for one case. Never raises on data content;
     degenerate cases get a flag and blank measures."""
     p = case.params
@@ -73,8 +88,10 @@ def measure_case(case, residual_threshold):
         "omega_1": p["omega_1"], "omega_2": p["omega_2"],
         "chi_bb_11": p["chi_bb_11"], "chi_bb_22": p["chi_bb_22"],
         "chi_bb_12": p["chi_bb_12"],
-        "n_points": 0, "n_branch": 0, "is_single": 0,
-        "residual_rms": "", "length": "", "dist_mean": "", "dist_max": "",
+        "pw_length": "", "dist_mean": "",
+        "n_points": 0, "n_segments": 0, "gap_total": "", "full_length": "",
+        "dist_max": "", "dist_min": "", "residual_rms": "", "pca_span": "",
+        "n_branch": 0, "is_single": 0,
         "flag": "",
     }
 
@@ -88,14 +105,21 @@ def measure_case(case, residual_threshold):
     n_branch = int(labels.max()) + 1 if len(labels) else 0
     row["n_branch"] = n_branch
 
+    # Headline length + gap diagnostics from the bend-robust MST.
+    length, n_segments, gap_total, full_length = geom.mst_length(pts, gap_tol)
+    row["pw_length"] = round(length, 8)
+    row["n_segments"] = n_segments
+    row["gap_total"] = round(gap_total, 8)
+    row["full_length"] = round(full_length, 8)
+
     if len(pts) < 2:
-        # A single point: length 0, no line to fit; still measure distance.
-        row["length"] = 0.0
+        # A single point: no line to fit; still measure distance below.
         row["residual_rms"] = 0.0
+        row["pca_span"] = 0.0
         row["flag"] = "too_few_points"
     else:
         line = geom.fit_line_pca(pts)
-        row["length"] = round(geom.projection_span(pts, line), 8)
+        row["pca_span"] = round(geom.projection_span(pts, line), 8)
         rms = geom.residual_rms(pts, line)
         row["residual_rms"] = round(rms, 8)
         row["is_single"] = int(n_branch == 1 and rms <= residual_threshold)
@@ -105,6 +129,7 @@ def measure_case(case, residual_threshold):
         d = geom.min_dist_to_set(pts, binodal)
         row["dist_mean"] = round(float(d.mean()), 8)
         row["dist_max"] = round(float(d.max()), 8)
+        row["dist_min"] = round(float(d.min()), 8)
     else:
         row["flag"] = (row["flag"] + ";" if row["flag"] else "") + "no_binodal"
 
@@ -115,6 +140,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--gap-tol", type=float, default=0.01,
+                    help="cut MST edges longer than this (segment separators)")
     ap.add_argument("--residual-threshold", type=float, default=0.003)
     args = ap.parse_args()
 
@@ -123,18 +150,18 @@ def main():
 
     rows = []
     for case in iter_cases(args.data_root):
-        rows.append(measure_case(case, args.residual_threshold))
+        rows.append(measure_case(case, args.residual_threshold, args.gap_tol))
 
     with open(out_path, "w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=FIELDS)
         writer.writeheader()
         writer.writerows(rows)
 
-    n_single = sum(r["is_single"] for r in rows)
-    n_multi = sum(1 for r in rows if r["n_branch"] > 1)
+    n_multiseg = sum(1 for r in rows if isinstance(r["n_segments"], int)
+                     and r["n_segments"] > 1)
     n_empty = sum(1 for r in rows if r["flag"] and "no_prewetting" in r["flag"])
-    print(f"cases: {len(rows)}  single-branch: {n_single}  "
-          f"multi-branch: {n_multi}  no-prewetting: {n_empty}")
+    print(f"cases: {len(rows)}  multi-segment (n_segments>1): {n_multiseg}  "
+          f"no-prewetting: {n_empty}  gap_tol={args.gap_tol}")
     print(f"wrote {out_path}")
 
 
