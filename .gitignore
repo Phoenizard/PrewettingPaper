@@ -7,7 +7,9 @@ data/
 reference/
 
 # Generated verification outputs / diagnostics
-out/
+out/*
+# but keep the analysis notes and their referenced figures/data
+!out/analysis/
 
 # Run logs (alongside out/) and throwaway/diagnostic scratch
 log/
