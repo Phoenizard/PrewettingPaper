@@ -100,6 +100,18 @@ the chibb-sweep stage (T-f, from chi_m8500_chibb_sweep).
 - Writing conventions (docs and notes): no Markdown bold (`**...**`). Keep LaTeX formulas
   pure math — no Chinese (or other prose) inside a formula; label terms in prose outside
   the math instead.
+- LaTeX rendering (chat replies AND notes). The renderer is strict; these break it, so they
+  are banned:
+  - `\text{...}` / `\mbox{...}` containing CJK. Never put Chinese inside math. Name the
+    quantity with a plain symbol and explain it in prose outside the formula.
+  - `\dfrac`, `\displaystyle`, and any fraction nested inside another fraction's numerator
+    or denominator. Use only flat `\frac{a}{b}`; if a term is itself a ratio, write it with
+    a slash, e.g. `\partial W/\partial \phi_1`.
+  - Manual spacing macros inside formulas: `\ `, `\;`, `\,`, `\!`, `\quad`, `\qquad`.
+  - `\Big` / `\big` / `\left` / `\right` sizing. Use plain `(`, `[`, `|`.
+  - Multiple relations or a list of definitions crammed into one display block.
+  Allowed: `\frac`, `\int`, `\sum`, `\partial`, `\ln`, `\phi`, `\mu`, `\chi`, `\omega`,
+  `\Delta`, `^`, `_`, `=`, `+`, `-`, plain brackets. One equation per display block.
 - Figures: `doc/note/figures/` is for NOTE figures only (pedagogical). Experiment /
   verification results go under `out/`, never a tmp directory. Produce phase-map / binodal
   figures with the numerical code (the paper's method), not by hand.
