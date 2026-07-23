@@ -50,18 +50,18 @@
 
 ## 下一步
 
-核心问题（度量定义）已解决（2026-07-13）：长度 L = MST 弧长剪空隙、距离头条
-dist_mean，不分 branch 合并整体量，omega topic 上经隔离怀疑者审查收束 SOUND。多段线的
-整体长度用 MST（剪 gap_tol）解决，gap 作诊断保留。见 2026-07-13 日志与
-doc/analysis/measure_extent_debate.md。
+（2026-07-21 重制）分析范围收窄：只做一个 case 分类下的分析，现有代码功能足够支撑
+当前 case 下的探索。原两项撤销、不做：extent 度量推到其余 3 个 topic；逐 case
+measure_map.png 用新度量重跑回写 pw-space/data。
 
-下一步（用户 gate）：
-- 把这套 extent 度量推到其余 3 个 topic：chibb12（墙面交叉耦合）、chibb11/22（墙面自
-  增强）、chi（体相拓扑）。定义通用、直接复用，逐 topic 出图 + 分析 + 隔离怀疑者审查。
-- 逐 case measure_map.png 是否用新度量（MST + L/d̄/seg）重跑覆盖回写 pw-space/data
-  （会改动组员可见的共享数据 1112 张图，需用户确认）。
-- 已放弃的路径：重算 gamma / cs 判 branch——被"必须区分 branch"这个错误前提逼出来的，
-  前提去掉即不需要。scripts/branch_by_gamma.py、src/geom.py 的 split_branches 存档不用。
+当前工作：
+- 设计论文大纲。
+- 在仓库内建 LaTeX 论文项目，用 git + Overleaf 追踪；与主仓库的隔离采用
+  嵌套仓库 + 外层 .gitignore 方案（见 2026-07-21 讨论）。
+
+已放弃的路径（存档）：重算 gamma / cs 判 branch——被"必须区分 branch"这个错误前提
+逼出来的，前提去掉即不需要。scripts/branch_by_gamma.py、src/geom.py 的
+split_branches 存档不用。
 
 遗留（存档，不影响验证结论）：12 case 档位不一致（400/150 混合）；case 3 参考线
 phi1 延到 0.29 超出 [0, 0.2] 扫描窗（project_plan 本就标注后期扩全区间）。

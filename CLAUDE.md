@@ -151,11 +151,23 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 - `doc/note/` — derivation and intro notes plus `figures/`; `reference_method.md` 是复现
   参考方法的自查笔记。
 - `doc/paper/` — reference paper (Omar, Adame, Arana 2020).
+- `manuscript/` — 论文 LaTeX 项目（独立嵌套 git 仓库，见下节）。
 - `reference/` — 同组成员可运行的参考实现（只读教材，不 import、不共享）。
 - `data/` — 同组成员的 pre-wetting 相图（旧名 result/、unvalidate_data/）。已验真为真，
   现为分析阶段的数据源。每个 case 只有 PNG，无数值 CSV。
 - `result_cases.txt` — 770 行三元组（chi 目录 / om 目录 / chibb 目录）case 清单。
 - `out/` — 已跑出的结果（PNG + pw_line.csv），被 .gitignore 忽略、不入 git。
+
+## Paper manuscript (`manuscript/`)
+
+- 独立嵌套 git 仓库，remote 是 Overleaf（git.overleaf.com），与本仓库互不可见：
+  外层 `.gitignore` 忽略整个 `manuscript/`，GitHub 不追踪它；它的提交与推送
+  一律由用户手动执行（与本仓库的 git 一样，Claude 不代做）。
+- `main.tex` 是唯一写作中心：全部正文都写在这个文件里，不拆 method/result 等多个 tex。
+- `NPJ/` 是期刊模版原件（注意：文件夹名叫 NPJ，内容实为 IOP Publishing 模版），
+  只读参考，`iopjournal-template.tex` 等一律不改；根目录 `iopjournal.cls` 是供
+  main.tex 使用的副本。
+- 编译验证在 Overleaf 端（push 后网页编译），本地不装 LaTeX 工具链。
 
 ## References
 
