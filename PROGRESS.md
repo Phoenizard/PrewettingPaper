@@ -24,6 +24,11 @@
   抗弯折/分段/密度、gap 作诊断），替代此前 PCA 单直线跨度（对弯线高估）；到 binodal
   距离头条 dist_mean（逐点最近距离取平均），dist_min/dist_max 作诊断。不分 branch、
   合并整体量。定义通用，4 topic 共用。
+- T-f（chi12 = -8.5、chi13 = chi23 = 0）已定为论文候选卖点（2026-07-26）：闭环 binodal 上出现
+  pre-wetting，且只在 omega 平面上沿 omega1 + omega2 近似常数的一条窄带内出现。该 stage 满足
+  溶质交换对称性（n1 = n2、kappa11 = kappa22、chi13 = chi23），故控制量是 omega1 + omega2 而非
+  各自的值；带的两端沿用 T-a 的 re-enter 双端终结（强端长度归零、弱端到 binodal 距离归零）。
+  详见同日进度日志。窄带二维形状未测，判定定性即可。
 - 角度 1 首轮探索作废（2026-07-09 产出，已由 eb924e5 提交）：所用观测量 phi2_inf_max 物理意义
   不明（混了 line 的长度与位置、依赖 line 朝向），pw_coverage 是像素数、非物理量；且
   结论把 omega 的符号方向读反。doc/analysis/angle1_omega.md 已清空重写为仅含研究设定。
@@ -55,6 +60,8 @@
 measure_map.png 用新度量重跑回写 pw-space/data。
 
 当前工作：
+- T-f 卖点的定性机制：为什么 pre-wetting 只出现在 omega1 + omega2 近似常数的窄带上。
+  按约定从自由能的项推导，不用数据交叉验证代替。
 - 设计论文大纲。
 - 在仓库内建 LaTeX 论文项目，用 git + Overleaf 追踪；与主仓库的隔离采用
   嵌套仓库 + 外层 .gitignore 方案（见 2026-07-21 讨论）。
@@ -95,6 +102,57 @@ environment.yml 固化依赖、phi_inf 扫描扩到全区间。重来后按新�
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-26（T-f 成为论文候选卖点：交换对称性 + omega1+omega2 窄带 + 双端 re-enter）
+
+对象 T-f（chi12 = -8.5、chi13 = chi23 = 0）：两溶质强烈互吸、都不与溶剂偏好性作用，
+binodal 为闭环（几何已与引用论文交叉验证，不再质疑）。本轮只讨论 omega，不讨论 chibb。
+
+数据摸底。T-f 共 90 case：chibb 全零覆盖 36 个 omega 点，其余 18 种 chibb 组合每种只有
+3 个 omega 点（锚点 (0.23,-0.375)、(0.25,-0.375)、(0.25,-0.395)），故能支撑 omega 变化的
+chibb 唯一可选是全零。这 36 个点不是网格而是十字星：一臂固定 omega2 = -0.375 扫 omega1
+（0.22..0.28 共 9 值），一臂固定 omega1 = 0.25 扫 omega2（-0.345..-0.405 共 9 值），加镜像臂
+17 个点与两个孤立点 (0,-0.125)、(-0.125,0)。无 pre-wetting 的记录本 stage 有 6 个（另 1 个
+只有单点），全部落在负 chibb（chibb12 = -0.1/-0.2、chibb22 = -0.1），chibb 全零的 36 点无一
+例外都有线。
+
+交换对称性（从自由能推，非数据交叉验证）。f_b 中互换 phi1 与 phi2：混合熵两项互换要求
+n1 = n2；phi_s ln phi_s 不变；chi13 phi1 phi_s 与 chi23 phi2 phi_s 互换成对方，要求
+chi13 = chi23；chi12 phi1 phi2 自身不变，因它是溶质-溶质项、对两溶质一视同仁，故强负 chi12
+不破坏对称性。梯度项要求 kappa11 = kappa22。config/base.yaml 实测 n1 = n2 = 1、
+kappa11 = kappa22 = 1，本 stage chi13 = chi23 = 0，条件全部满足。f_surf 在互换下把 omega1 与
+omega2 对调、chibb11 与 chibb22 对调。结论：模型在「互换两溶质浓度场 + 互换 omega1/omega2 +
+互换 chibb11/chibb22」下不变，故 (0.25,-0.375) 与 (-0.375,0.25) 是同一系统换标号、相图关于
+phi1_inf = phi2_inf 对角线互为镜像。推论两条：只有一片区域，镜像那处由对称性强制、不是独立
+证据；自然坐标是 omega1 + omega2 与 |omega1 - omega2|，而非各自的值。破坏对称性的是
+chi13 与 chi23 不等或 n1 与 n2 不等（T-a 即前者）。
+
+存在区域是一条窄带。用户提供的粗扫：omega 取 20 值（-20..+1）两两配对共 400 组，未见
+pre-wetting。核对该 20 值列表，omega1 + omega2 恰为 -0.125 的只有 4 组有序对——
+(0.25,-0.375)、(-0.375,0.25)、(0,-0.125)、(-0.125,0)——而这 4 组在档案里全部有 pre-wetting。
+故粗扫与档案不矛盾：落在这条和为常数的线上的全部有线，不在其上的全部没有。十字两条臂在
+omega1 + omega2 坐标下扫的是同一段（-0.155 到 -0.095），跨度约 0.06，而粗扫步长 0.125 起，
+基本跨过该带。定性图像：pre-wetting 存在区是 omega 平面上沿 omega1 + omega2 近似常数的窄带，
+十字是横切它的两刀。
+
+双端终结沿用 T-a 的 re-enter 结构（out/analysis/omega/omega_measures.md 结论 2）：pre-wetting
+需同时满足线存在与线和 binodal 分离，两端各由不同的量归零而终结——净吸附强端由长度归零
+（一级薄厚跳变被推过临界点、退化为连续吸附），弱端由到 binodal 距离归零（线贴上 binodal、
+失去独立于共存的身份）。T-f 十字一端线短而远离 binodal、一端线长而贴近 binodal，正是这两端。
+区别只在控制量：T-a 由 omega1 单独控制（chi13 != chi23，对称性破缺），T-f 由 omega1 + omega2
+控制（对称性完好）。窄带的二维形状未测，用户判定定性即可、不必追边界。
+
+产物。scripts/plot_tf_survey.py（9 case 巡览，覆盖 omega1/omega2/chibb12/chibb22/chibb11 五个
+控制变量）与 scripts/plot_tf_omega_cross.py（十字 2x5 共 10 张，chibb 全零，上排 omega1 取
+0.22/0.24/0.25/0.26/0.28，下排 omega2 取 -0.405/-0.385/-0.375/-0.365/-0.345，两排第 3 列同为
+十字中心），图在 out/analysis/Tf_survey/ 与 out/analysis/Tf_omega_cross/。
+
+约定订正两条。pw_line.csv 的 source 列（fix_phi1/fix_phi2）只是扫描方向、不是物理区分，作图与
+分析一律合并成一条 pre-wetting 线，判断有几条线只能依据几何聚集，不能依据扫描方向。代码更新
+一律走 git（本地 commit+push、服务器 source /etc/network_turbo 后 git pull），禁止 scp 传代码，
+scp 只用于结果回传；服务器 autodl-tmp/PrewettingPaper 原为 scp 拼出的非 git 目录，已重新 clone
+为正式检出，旧目录留作 PrewettingPaper_scp_backup。同期误删了服务器 log/ 目录（7-23 那批 T-a
+绘图日志），结果数据未受影响。
 
 ### 2026-07-13（extent 度量敲定：长度改 MST + omega topic 收束 + 共享存储同步）
 
