@@ -3,8 +3,9 @@
 Picks 9 cases from the pw-space archive that span every control variable this
 stage scans (omega1, omega2, chibb12, chibb22, chibb11) around the anchor
 (omega1, omega2) = (0.25, -0.375), chibb = 0. Writes one PNG per case plus a
-3x3 contact sheet. Prewetting points are coloured by scan direction so that
-distinct prewetting lines can be told apart from scan artefacts.
+3x3 contact sheet. All prewetting points of a case are drawn as one set: the
+source column of pw_line.csv records only which scan direction found a point,
+which is a numerical detail, not a physical distinction.
 
 Usage:
   python scripts/plot_tf_survey.py [--data-root DIR] [--out-dir DIR]
@@ -47,10 +48,7 @@ CASES = [
      r"anchor, $\chi_{bb,11} = -0.1$", "chibb11 sweep"),
 ]
 
-SRC_STYLE = {
-    "fix_phi1": ("#1f77b4", "o", r"scan at fixed $\phi_{1,\infty}$"),
-    "fix_phi2": ("#d62728", "s", r"scan at fixed $\phi_{2,\infty}$"),
-}
+PW_COLOR = "#d62728"
 
 
 def read_rows(path):
@@ -64,14 +62,11 @@ def draw(ax, case_dir, label):
             ".", ms=1.0, color="0.55", zorder=1)
 
     pw = read_rows(case_dir / "pw_line.csv")
-    n = 0
-    for src, (color, marker, leg) in SRC_STYLE.items():
-        xs = [float(r["phi1_inf"]) for r in pw if r["source"] == src]
-        ys = [float(r["phi2_inf"]) for r in pw if r["source"] == src]
-        n += len(xs)
-        if xs:
-            ax.plot(xs, ys, marker, ms=2.6, color=color, lw=0,
-                    label=leg, zorder=3)
+    xs = [float(r["phi1_inf"]) for r in pw]
+    ys = [float(r["phi2_inf"]) for r in pw]
+    n = len(xs)
+    if xs:
+        ax.plot(xs, ys, "o", ms=2.6, color=PW_COLOR, lw=0, zorder=3)
     ax.set_title(f"{label}   (n = {n})", fontsize=9)
     ax.set_xlabel(r"$\phi_{1,\infty}$")
     ax.set_ylabel(r"$\phi_{2,\infty}$")
@@ -91,7 +86,6 @@ def main():
     for tag, om, chibb, label, group in CASES:
         fig, ax = plt.subplots(figsize=(5.4, 4.6))
         n = draw(ax, root / om / chibb, label)
-        ax.legend(fontsize=8, markerscale=2.5, loc="best")
         fig.tight_layout()
         fig.savefig(out / f"{tag}.png", dpi=170)
         plt.close(fig)
@@ -100,7 +94,6 @@ def main():
     fig, axes = plt.subplots(3, 3, figsize=(14.0, 11.5))
     for ax, (tag, om, chibb, label, group) in zip(axes.ravel(), CASES):
         draw(ax, root / om / chibb, label)
-    axes.ravel()[0].legend(fontsize=7, markerscale=2.5, loc="best")
     fig.tight_layout()
     fig.savefig(out / "00_contact_sheet.png", dpi=150)
     plt.close(fig)
