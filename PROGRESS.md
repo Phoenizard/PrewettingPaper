@@ -18,7 +18,17 @@
 - 观测量框架（2026-07-10 定）：prewetting 要测两件独立的事——strength 即 thin/thick
   两分支的吸附量之差 Delta-Gamma（跳变幅度），二维相图读不出，全程搁置；extent 即
   prewetting 在 (phi1_inf, phi2_inf) 平面上的占地，由两个互补分量刻画：prewetting line
-  的长度、prewetting line 到 binodal 的距离。两个分量的精确定义尚未敲定。
+  的长度、prewetting line 到 binodal 的距离。
+- extent 精确定义已敲定（2026-07-13，omega topic 上，经隔离怀疑者审查收束 SOUND）：
+  长度 L = MST 弧长剪空隙（建欧氏最小生成树、剪 >gap_tol=0.015 的桥边、剩余边长求和，
+  抗弯折/分段/密度、gap 作诊断），替代此前 PCA 单直线跨度（对弯线高估）；到 binodal
+  距离头条 dist_mean（逐点最近距离取平均），dist_min/dist_max 作诊断。不分 branch、
+  合并整体量。定义通用，4 topic 共用。
+- T-f（chi12 = -8.5、chi13 = chi23 = 0）已定为论文候选卖点（2026-07-26）：闭环 binodal 上出现
+  pre-wetting，且只在 omega 平面上沿 omega1 + omega2 近似常数的一条窄带内出现。该 stage 满足
+  溶质交换对称性（n1 = n2、kappa11 = kappa22、chi13 = chi23），故控制量是 omega1 + omega2 而非
+  各自的值；带的两端沿用 T-a 的 re-enter 双端终结（强端长度归零、弱端到 binodal 距离归零）。
+  详见同日进度日志。窄带二维形状未测，判定定性即可。
 - 角度 1 首轮探索作废（2026-07-09 产出，已由 eb924e5 提交）：所用观测量 phi2_inf_max 物理意义
   不明（混了 line 的长度与位置、依赖 line 朝向），pw_coverage 是像素数、非物理量；且
   结论把 omega 的符号方向读反。doc/analysis/angle1_omega.md 已清空重写为仅含研究设定。
@@ -45,14 +55,23 @@
 
 ## 下一步
 
-- 敲定 extent 两个观测量的精确定义（前置，决定全部 4 个 topic 的结论）：
-  line 长度如何量（像素弧长？多分支如何合并）；到 binodal 的距离如何量
-  （最短距离，还是沿特定方向；多分支算哪一支）。
-- 估计各 topic 的预期效应量能否被像素法分辨（PNG 提取精度约 ±0.005），
-  避免把噪声当物理。
-- 定义敲定后按新观测量重写 scripts/angle1_omega.py 的指标部分，重跑 topic 1。
-- 遗留（存档，不影响验证结论）：12 case 档位不一致（400/150 混合）；case 3 参考线
-  phi1 延到 0.29 超出 [0, 0.2] 扫描窗（project_plan 本就标注后期扩全区间）。
+（2026-07-21 重制）分析范围收窄：只做一个 case 分类下的分析，现有代码功能足够支撑
+当前 case 下的探索。原两项撤销、不做：extent 度量推到其余 3 个 topic；逐 case
+measure_map.png 用新度量重跑回写 pw-space/data。
+
+当前工作：
+- T-f 卖点的定性机制：为什么 pre-wetting 只出现在 omega1 + omega2 近似常数的窄带上。
+  按约定从自由能的项推导，不用数据交叉验证代替。
+- 设计论文大纲。
+- 在仓库内建 LaTeX 论文项目，用 git + Overleaf 追踪；与主仓库的隔离采用
+  嵌套仓库 + 外层 .gitignore 方案（见 2026-07-21 讨论）。
+
+已放弃的路径（存档）：重算 gamma / cs 判 branch——被"必须区分 branch"这个错误前提
+逼出来的，前提去掉即不需要。scripts/branch_by_gamma.py、src/geom.py 的
+split_branches 存档不用。
+
+遗留（存档，不影响验证结论）：12 case 档位不一致（400/150 混合）；case 3 参考线
+phi1 延到 0.29 超出 [0, 0.2] 扫描窗（project_plan 本就标注后期扩全区间）。
 
 （以下为历史遗留 TODO，代码已删，仅存档：全量 770 case 扫描、结果对比 UI、
 environment.yml 固化依赖、phi_inf 扫描扩到全区间。重来后按新代码再规划。）
@@ -83,6 +102,119 @@ environment.yml 固化依赖、phi_inf 扫描扩到全区间。重来后按新�
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-26（T-f 成为论文候选卖点：交换对称性 + omega1+omega2 窄带 + 双端 re-enter）
+
+对象 T-f（chi12 = -8.5、chi13 = chi23 = 0）：两溶质强烈互吸、都不与溶剂偏好性作用，
+binodal 为闭环（几何已与引用论文交叉验证，不再质疑）。本轮只讨论 omega，不讨论 chibb。
+
+数据摸底。T-f 共 90 case：chibb 全零覆盖 36 个 omega 点，其余 18 种 chibb 组合每种只有
+3 个 omega 点（锚点 (0.23,-0.375)、(0.25,-0.375)、(0.25,-0.395)），故能支撑 omega 变化的
+chibb 唯一可选是全零。这 36 个点不是网格而是十字星：一臂固定 omega2 = -0.375 扫 omega1
+（0.22..0.28 共 9 值），一臂固定 omega1 = 0.25 扫 omega2（-0.345..-0.405 共 9 值），加镜像臂
+17 个点与两个孤立点 (0,-0.125)、(-0.125,0)。无 pre-wetting 的记录本 stage 有 6 个（另 1 个
+只有单点），全部落在负 chibb（chibb12 = -0.1/-0.2、chibb22 = -0.1），chibb 全零的 36 点无一
+例外都有线。
+
+交换对称性（从自由能推，非数据交叉验证）。f_b 中互换 phi1 与 phi2：混合熵两项互换要求
+n1 = n2；phi_s ln phi_s 不变；chi13 phi1 phi_s 与 chi23 phi2 phi_s 互换成对方，要求
+chi13 = chi23；chi12 phi1 phi2 自身不变，因它是溶质-溶质项、对两溶质一视同仁，故强负 chi12
+不破坏对称性。梯度项要求 kappa11 = kappa22。config/base.yaml 实测 n1 = n2 = 1、
+kappa11 = kappa22 = 1，本 stage chi13 = chi23 = 0，条件全部满足。f_surf 在互换下把 omega1 与
+omega2 对调、chibb11 与 chibb22 对调。结论：模型在「互换两溶质浓度场 + 互换 omega1/omega2 +
+互换 chibb11/chibb22」下不变，故 (0.25,-0.375) 与 (-0.375,0.25) 是同一系统换标号、相图关于
+phi1_inf = phi2_inf 对角线互为镜像。推论两条：只有一片区域，镜像那处由对称性强制、不是独立
+证据；自然坐标是 omega1 + omega2 与 |omega1 - omega2|，而非各自的值。破坏对称性的是
+chi13 与 chi23 不等或 n1 与 n2 不等（T-a 即前者）。
+
+存在区域是一条窄带。用户提供的粗扫：omega 取 20 值（-20..+1）两两配对共 400 组，未见
+pre-wetting。核对该 20 值列表，omega1 + omega2 恰为 -0.125 的只有 4 组有序对——
+(0.25,-0.375)、(-0.375,0.25)、(0,-0.125)、(-0.125,0)——而这 4 组在档案里全部有 pre-wetting。
+故粗扫与档案不矛盾：落在这条和为常数的线上的全部有线，不在其上的全部没有。十字两条臂在
+omega1 + omega2 坐标下扫的是同一段（-0.155 到 -0.095），跨度约 0.06，而粗扫步长 0.125 起，
+基本跨过该带。定性图像：pre-wetting 存在区是 omega 平面上沿 omega1 + omega2 近似常数的窄带，
+十字是横切它的两刀。
+
+双端终结沿用 T-a 的 re-enter 结构（out/analysis/omega/omega_measures.md 结论 2）：pre-wetting
+需同时满足线存在与线和 binodal 分离，两端各由不同的量归零而终结——净吸附强端由长度归零
+（一级薄厚跳变被推过临界点、退化为连续吸附），弱端由到 binodal 距离归零（线贴上 binodal、
+失去独立于共存的身份）。T-f 十字一端线短而远离 binodal、一端线长而贴近 binodal，正是这两端。
+区别只在控制量：T-a 由 omega1 单独控制（chi13 != chi23，对称性破缺），T-f 由 omega1 + omega2
+控制（对称性完好）。窄带的二维形状未测，用户判定定性即可、不必追边界。
+
+产物。scripts/plot_tf_survey.py（9 case 巡览，覆盖 omega1/omega2/chibb12/chibb22/chibb11 五个
+控制变量）与 scripts/plot_tf_omega_cross.py（十字 2x5 共 10 张，chibb 全零，上排 omega1 取
+0.22/0.24/0.25/0.26/0.28，下排 omega2 取 -0.405/-0.385/-0.375/-0.365/-0.345，两排第 3 列同为
+十字中心），图在 out/analysis/Tf_survey/ 与 out/analysis/Tf_omega_cross/。
+
+约定订正两条。pw_line.csv 的 source 列（fix_phi1/fix_phi2）只是扫描方向、不是物理区分，作图与
+分析一律合并成一条 pre-wetting 线，判断有几条线只能依据几何聚集，不能依据扫描方向。代码更新
+一律走 git（本地 commit+push、服务器 source /etc/network_turbo 后 git pull），禁止 scp 传代码，
+scp 只用于结果回传；服务器 autodl-tmp/PrewettingPaper 原为 scp 拼出的非 git 目录，已重新 clone
+为正式检出，旧目录留作 PrewettingPaper_scp_backup。同期误删了服务器 log/ 目录（7-23 那批 T-a
+绘图日志），结果数据未受影响。
+
+### 2026-07-13（extent 度量敲定：长度改 MST + omega topic 收束 + 共享存储同步）
+
+度量：长度从 PCA 单直线跨度换成 MST 弧长剪空隙（geom.mst_length：建欧氏 MST、剪
+>gap_tol 的桥边、剩余边长求和）。动机：实测全库 1083 有效 case 只有 462 能当单直线拟
+合，PCA 对弯线高估（T-e 弯线例 0.166 vs 真实 0.071）。gap_tol=0.015 在 omega topic 标
+定（线内点距 ~0.0014、网格步长 0.02，取其间；扫 gap_tol 看段数平台）。gap 不丢：段数
+n_segments、总空隙 gap_total、含空隙全长 full_length 作诊断（两条 line 合拢/分开在此体
+现）。extract_measures 头条列 pw_length/dist_mean，加诊断列；is_single 降为信息列。
+plot_all_cases 叠加 MST 边（段实线/gap 虚线）+ 角标。新增 plot_omega_maps.py。
+
+流程（用户要的 agent-team 闭环）：提方案→服务器抽数据+出图+分析→隔离怀疑者审查→辩论
+收束。全库 1112 case 抽完（9 无 pre-wetting）。omega topic（T-a chibb=0，121 case，119
+有 pre-wetting）结论：omega1 主控、omega2 近乎惰性；弱吸引→线长且贴 binodal，强吸引→
+线短伸更深、在 omega1=-0.50 强吸引角熄灭（2 格）。隔离怀疑者（全新 agent、只喂物理+背
+景+结果）独立跑反驳检验后裁决 SOUND，3 条修正均报告层（并列 dist_min、近熄灭 L 交叉
+核、注明 binodal 密采样），不改定义；论证记录 doc/analysis/measure_extent_debate.md。
+
+机制订正（第二个全新 agent 评判）：omega2 惰性的定性解释应从 W 地形讲、不是 f_b——
+pre-wetting 由 gamma=∫(W+梯度)+f_surf 决定，取决于 W（f_b 减远场切平面）是否长第二个
+厚膜阱。本拓扑 ∂²W/∂φ1²=1/φ1+1/φs-2χ13 可变负→沿 φ1 出阱，∂²W/∂φ2²=1/φ2+1/φs 恒正
+→沿 φ2 无阱。溶质 2 非完全解耦：溶剂熵 φs ln φs（φs=1-φ1-φ2）经非对角曲率 1/φs-χ13
+弱耦合两溶质，故 omega2 有二阶效应（近乎惰性而非完全）。旧「φ2 不与溶剂/溶质 1 相互作
+用」说法错、已改。（记 memory qualitative-analysis-from-free-energy：定性分析从自由能
+项推、不用数据交叉验证代替。）
+
+产物与同步：out/analysis/（gitignore）下 measures.csv、omega/omega_length_dist.png（右
+图 d̄ 反转色阶、两图亮区统一到弱吸引角）、README.md（问题+指标含表达式+MST 说明与例图+
+热图+结论）、mst_example.png。已同步到共享存储 pw-space/analysis/（README + measures.csv
++ omega 图 + MST 示例，组员可见）。代码改动提交 branch measures-extraction 并 push。
+服务器数据机 ssh -p 53481 自带 numenv、pw-space 挂载；本地无 CSV 故抽数据在服务器跑。
+
+待定（用户 gate）：度量推到其余 3 topic（chibb12 / chibb11-22 / chi）；逐 case
+measure_map.png 是否用新度量重跑覆盖回写 pw-space/data。
+
+### 2026-07-12（数据核对 1112 case + 度量层搭建 + branch 路线试错后转向）
+
+数据：共享存储 pw-space/data 组员多轮更新后为 6 种 binodal（T-a 259 / T-b 120 /
+T-c 251 / T-d 131 / T-e 261 / T-f 90）共 1112 case，独立核对完整（每 case 两个 CSV、
+无缺文件、无杂物、深度全对）；CSV 列仅 source,phi1_inf,phi2_inf，无 branch 列
+（老 overlay PNG 的 PW branch 0/1/2/3 规范化时丢失）；T-b/T-f 那批约 210 文件 CRLF 行尾。
+data/README.md 仍停旧数字（794）。执行环境换 CPU 服务器 ssh -p 53481，自带 numenv；
+数据机 pw-space 共享挂载在计算服务器可直接读、且 data/ 可写（图回写就地）。
+
+代码：新增度量层（分支 measures-extraction）——src/geom.py（PCA 拟合/投影长度/点到
+binodal 最短距离/残差，单元自检全绿）、src/cases.py（枚举+内联目录名解析，去 yaml 依赖）、
+scripts/extract_measures.py（全库度量总表）、scripts/plot_all_cases.py（逐 case 科研图，
+全英文标签、图回写 data/）。均已 push。github clone 在 network_turbo 下反复 early EOF，
+改用 scp 传单文件绕过。
+
+branch 路线试错（走了弯路，已放弃）：出样图发现按 branch 分色时，几何 split_branches
+（移植 reference 的相邻切片 phi1 差 < link_tol）把一条陡的单分支线误切成多段。转而按
+用户要求用物理判据：scripts/branch_by_gamma.py 对每个 pre-wetting 点重算 thin/thick
+两支的 gamma 与 cs（=表面吸附量 surface excess Γ，代码内部变量名），据 cs 沿 line 的
+连续性判分支。样例（T-c om1=-0.32/om2=-0.46）验证确实能把几何误切的段合并、把真边界
+（两支 cs 同时大跳处）与孤立点区分开——但也暴露求解器单点跳解噪声。
+
+关键转向（用户提出）：目标是 omega 与 pre-wetting 的关系、衡量 pre-wetting 发生的
+难易程度，不必区分 branch。两条 line 合拢/分开本身就是物理效果（T-b 那组随参数从两端
+合拢即例），按 branch 切开反而割裂。故：一个 case 所有 pre-wetting 点全部合并当整体量，
+不区分 branch。整个"重算 gamma 判 branch"路径因前提取消而放弃。新引入的难题：多段线
+情形下整体长度、到 binodal 距离怎么定义。用户决定开新 session 专门讨论此核心问题。
 
 ### 2026-07-10（转入数据分析阶段：观测量框架重定 + topic 清单定稿）
 
