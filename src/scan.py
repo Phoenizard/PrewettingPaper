@@ -57,8 +57,13 @@ def branch_guess(p, scan_cfg, mode):
     return np.concatenate([p1, p2])
 
 
-def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode, label=""):
-    """One directional sweep. Mutates solver.p.<sweep_attr> point by point."""
+def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode, label="", store=None):
+    """One directional sweep. Mutates solver.p.<sweep_attr> point by point.
+
+    store: optional dict; when given, every converged profile U is copied into
+    store[i] keyed by the sweep index. Purely a read-out hook for analysis —
+    with store=None the code path and the numbers are unchanged.
+    """
     p = solver.p
     n = len(values)
     omega = np.full(n, np.nan)
@@ -74,6 +79,8 @@ def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode, label=""):
             om, cs1, cs2 = solver.surface_metrics(U)
             omega[i] = om
             cs[i] = cs1 + cs2
+            if store is not None:
+                store[i] = U.copy()
         else:
             fails += 1
         if (i + 1) % _LOG_EVERY == 0 or (i + 1) == n:
@@ -81,19 +88,27 @@ def _sweep_branch(solver, scan_cfg, sweep_attr, values, mode, label=""):
     return omega, cs
 
 
-def hysteresis_line(solver, scan_cfg, sweep_attr, label=""):
+def hysteresis_line(solver, scan_cfg, sweep_attr, label="", store_thin=None, store_thick=None):
     """Bidirectional scan of solver.p.<sweep_attr> ('phi1_inf' or 'phi2_inf').
 
     Returns dict with scan values and per-branch Omega / total cs arrays.
+    store_thin / store_thick: optional dicts collecting the converged profiles,
+    keyed by the index into the returned "values" array (the thick sweep runs
+    backwards, so its keys are re-mapped to that same forward order).
     """
     values = np.linspace(scan_cfg.phi_min, scan_cfg.phi_max, int(scan_cfg.n_scan))
+    n = len(values)
 
     omega_thin, cs_thin = _sweep_branch(
-        solver, scan_cfg, sweep_attr, values, "thin", label=label
+        solver, scan_cfg, sweep_attr, values, "thin", label=label, store=store_thin
     )
+    store_thick_rev = {} if store_thick is not None else None
     omega_thick_rev, cs_thick_rev = _sweep_branch(
-        solver, scan_cfg, sweep_attr, values[::-1], "thick", label=label
+        solver, scan_cfg, sweep_attr, values[::-1], "thick", label=label, store=store_thick_rev
     )
+    if store_thick is not None:
+        for i, U in store_thick_rev.items():
+            store_thick[n - 1 - i] = U
     return {
         "values": values,
         "omega_thin": omega_thin,
