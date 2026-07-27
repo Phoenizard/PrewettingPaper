@@ -40,6 +40,7 @@ BINODAL_COLOR = "0.55"
 PW_COLOR = "#d62728"
 DIAG_COLOR = "0.80"
 PAD_FRAC = 0.05
+AXIS_EPS = 1e-6
 
 
 def encode(value):
@@ -74,10 +75,19 @@ def draw(ax, case, label):
 
 
 def square_window(cases):
-    """One window used for both axes, so the phi1 = phi2 diagonal is at 45 deg."""
+    """One window used for both axes, so the phi1 = phi2 diagonal is at 45 deg.
+
+    Framed on the closed binodal loop and the prewetting points. binodal.csv
+    also carries a dense row of points at phi2 < 1e-6 running the whole phi1
+    range, with no mirror row on the phi1 = 0 side: on that edge the mixture is
+    binary with chi13 = 0, which has no coexistence, so those are degenerate
+    solutions of the binodal solve. Framing on them would shrink the loop to a
+    corner. They are still drawn -- they just fall outside the window.
+    """
     vals = []
     for c in cases:
-        vals += c["bx"] + c["px"] + c["by"] + c["py"]
+        loop = [(x, y) for x, y in zip(c["bx"], c["by"]) if y > AXIS_EPS]
+        vals += [v for xy in loop for v in xy] + c["px"] + c["py"]
     lo, hi = min(vals), max(vals)
     pad = (hi - lo) * PAD_FRAC
     return lo - pad, hi + pad
