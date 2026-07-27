@@ -64,7 +64,13 @@ Parameter roles:
 - chi12, chi13, chi23: bulk Flory-Huggins interactions — chi12 solute1-solute2, chi13 solute1-solvent, chi23 solute2-solvent. They set the bulk phase topology (which stage / T-a..T-f).
 - omega1, omega2 (wall affinity of solute 1, 2) and chibb11, chibb22, chibb12 (surface-enhanced interactions) enter only f_surf, i.e. the wall boundary condition.
 - n1, n2 solute-to-solvent size ratios; kappa1, kappa2 gradient penalties; nu, nubar, kBT scales.
-Derivation: [doc/note/ternary.md](doc/note/ternary.md).
+
+Source of truth for the model, the solving condition and the equilibrium equations is
+[doc/note/project_plan.md](doc/note/project_plan.md). (`doc/note/ternary.md` had errors in
+the details and was deleted — do not restore or cite it.) The plan writes some symbols
+differently; the correspondence is chi_1s = chi13, chi_2s = chi23, omega_{b,i} = omega_i,
+chibb_1 = chibb11, chibb_2 = chibb22. This file keeps the chi13 / omega1 / chibb11 spelling
+because it matches the directory names and the code variables.
 
 ## Control variables and their value sets
 
@@ -114,7 +120,9 @@ the chibb-sweep stage (T-f, from chi_m8500_chibb_sweep).
   `\Delta`, `^`, `_`, `=`, `+`, `-`, plain brackets. One equation per display block.
 - Figures: `doc/note/figures/` is for NOTE figures only (pedagogical). Experiment /
   verification results go under `out/`, never a tmp directory. Produce phase-map / binodal
-  figures with the numerical code (the paper's method), not by hand.
+  figures with the numerical code (the paper's method), not by hand. `out/analysis/` is
+  tracked by git (analysis notes plus the figures and CSVs they reference), so keep what
+  lands there presentable; the rest of `out/` stays ignored.
 
 ## SSH data-access machine (fixed)
 
@@ -148,15 +156,17 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 - `config/` — 单一 yaml 参数源。
 - `doc/analysis/` — 数据分析阶段的记录：`topiclist.md` 是 4 个 topic 的索引，
   每个 topic 一个 note。图不进 doc/analysis/，留在 `out/`。
-- `doc/note/` — derivation and intro notes plus `figures/`; `reference_method.md` 是复现
-  参考方法的自查笔记。
+- `doc/note/` — `project_plan.md`（模型与求解条件的唯一出处）、intro note 与 `figures/`；
+  `reference_method.md` 是复现参考方法的自查笔记。
 - `doc/paper/` — reference paper (Omar, Adame, Arana 2020).
 - `manuscript/` — 论文 LaTeX 项目（独立嵌套 git 仓库，见下节）。
 - `reference/` — 同组成员可运行的参考实现（只读教材，不 import、不共享）。
 - `data/` — 同组成员的 pre-wetting 相图（旧名 result/、unvalidate_data/）。已验真为真，
   现为分析阶段的数据源。每个 case 只有 PNG，无数值 CSV。
 - `result_cases.txt` — 770 行三元组（chi 目录 / om 目录 / chibb 目录）case 清单。
-- `out/` — 已跑出的结果（PNG + pw_line.csv），被 .gitignore 忽略、不入 git。
+- `out/` — 已跑出的结果（PNG + pw_line.csv）。`.gitignore` 是 `out/*` 加例外
+  `!out/analysis/`：只有 `out/analysis/` 入 git（分析笔记及其引用的图与 CSV），
+  其余结果留本地。
 
 ## Paper manuscript (`manuscript/`)
 
@@ -175,10 +185,10 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
   entries); update it as the analysis advances.
 - [doc/analysis/topiclist.md](doc/analysis/topiclist.md) — the 4 analysis topics, one per
   control-variable group; index into the per-topic notes.
-- [doc/note/project_plan.md](doc/note/project_plan.md) — goals, control-variable structure,
-  the 6 topologies, the E1-E5 surface-experiment matrix.
-- [doc/note/ternary.md](doc/note/ternary.md) — model: `f_b`, `W`, `f_surf`, the Gibbs
-  surface energy `gamma`, equilibrium conditions, and the phase-space-integral algorithm.
+- [doc/note/project_plan.md](doc/note/project_plan.md) — the model and solving condition
+  (`f_b`, `W`, `f_surf`, `gamma`, the equilibrium equations and their boundary conditions,
+  the first integral), goals, the three-layer control-variable structure, the 6 topologies,
+  and the stated limitations. Answer model questions from this file.
 - [doc/note/prewetting_intro.md](doc/note/prewetting_intro.md) — pedagogical intro
   (wells, phase separation, thin/thick transition).
 

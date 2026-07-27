@@ -10,6 +10,11 @@ All prewetting points of a case are drawn as one set: the source column of
 pw_line.csv records only which scan direction found a point, which is a
 numerical detail, not a physical distinction.
 
+Both axes share one square window and equal aspect, so the phi1 = phi2 diagonal
+(drawn faint in every panel) sits at 45 degrees: this topology is symmetric
+under swapping the two solutes together with omega1 and omega2, and the figure
+has to show that symmetry undistorted.
+
 Usage:
   python scripts/plot_tf_omega_cross.py [--data-root DIR] [--out-dir DIR]
 """
@@ -33,6 +38,7 @@ ROW2_OM2 = [-0.405, -0.385, -0.375, -0.365, -0.345]
 
 BINODAL_COLOR = "0.55"
 PW_COLOR = "#d62728"
+DIAG_COLOR = "0.80"
 PAD_FRAC = 0.05
 
 
@@ -67,14 +73,21 @@ def draw(ax, case, label):
     ax.set_title(label, fontsize=10)
 
 
-def shared_limits(cases):
-    xs, ys = [], []
+def square_window(cases):
+    """One window used for both axes, so the phi1 = phi2 diagonal is at 45 deg."""
+    vals = []
     for c in cases:
-        xs += c["bx"] + c["px"]
-        ys += c["by"] + c["py"]
-    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-    px, py = (x1 - x0) * PAD_FRAC, (y1 - y0) * PAD_FRAC
-    return (x0 - px, x1 + px), (y0 - py, y1 + py)
+        vals += c["bx"] + c["px"] + c["by"] + c["py"]
+    lo, hi = min(vals), max(vals)
+    pad = (hi - lo) * PAD_FRAC
+    return lo - pad, hi + pad
+
+
+def style_axes(ax, lim):
+    ax.plot(lim, lim, "--", lw=0.7, color=DIAG_COLOR, zorder=0)
+    ax.set_xlim(*lim)
+    ax.set_ylim(*lim)
+    ax.set_aspect("equal", adjustable="box")
 
 
 def main():
@@ -91,16 +104,15 @@ def main():
     row2 = [load_case(root, CENTRE_OM1, om2) for om2 in ROW2_OM2]
     row1_labels = [rf"$\omega_1 = {om1:g}$" for om1 in ROW1_OM1]
     row2_labels = [rf"$\omega_2 = {om2:g}$" for om2 in ROW2_OM2]
-    xlim, ylim = shared_limits(row1 + row2)
+    lim = square_window(row1 + row2)
 
-    fig, axes = plt.subplots(2, 5, figsize=(16.0, 7.0),
+    fig, axes = plt.subplots(2, 5, figsize=(15.0, 6.6),
                              sharex=True, sharey=True)
     for ax_row, cases, labels in zip(axes, (row1, row2),
                                      (row1_labels, row2_labels)):
         for ax, case, label in zip(ax_row, cases, labels):
             draw(ax, case, label)
-            ax.set_xlim(*xlim)
-            ax.set_ylim(*ylim)
+            style_axes(ax, lim)
     for ax in axes[1]:
         ax.set_xlabel(r"$\phi_{1,\infty}$")
     axes[0][0].set_ylabel(rf"$\omega_2 = {CENTRE_OM2:g}$ fixed"
@@ -118,10 +130,9 @@ def main():
                    rf"$\omega_1 = {c['om1']:g}$, $\omega_2 = {c['om2']:g}$")
                   for c in row2])
     for tag, case, label in singles:
-        fig, ax = plt.subplots(figsize=(5.4, 4.8))
+        fig, ax = plt.subplots(figsize=(5.0, 5.0))
         draw(ax, case, label)
-        ax.set_xlim(*xlim)
-        ax.set_ylim(*ylim)
+        style_axes(ax, lim)
         ax.set_xlabel(r"$\phi_{1,\infty}$")
         ax.set_ylabel(r"$\phi_{2,\infty}$")
         fig.tight_layout()
