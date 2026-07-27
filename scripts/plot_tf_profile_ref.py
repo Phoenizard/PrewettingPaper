@@ -4,7 +4,7 @@ Reads profiles.csv and states.csv from that script's output directory and draws
 one panel per far field: phi_1(z) and phi_2(z) for the low-adsorption state
 (thin film, solid) and the high-adsorption state (thick film, dashed), with the
 far-field levels as dotted lines. The x axis is cut where both profiles have
-relaxed back to the far field; tf_profiles_fullz.png keeps the whole box.
+relaxed back to the far field.
 
 Also prints the numbers the T-f note's two claims turn on: the wall contact
 values, the width over which each state deviates from the far field, and how
@@ -137,17 +137,15 @@ def main():
 
     report(prof, states, point_ids)
 
-    zlim_cut, zlim_full = {}, {}
+    zlim_cut = {}
     for pid in point_ids:
         s0 = states[pid][sorted(states[pid])[0]]
         p1i, p2i = float(s0["phi1_inf"]), float(s0["phi2_inf"])
         widths = [deviation_width(prof[(pid, s)], p1i, p2i) for s in states[pid]]
         z_full = max(prof[(pid, s)]["z"].max() for s in states[pid])
         zlim_cut[pid] = min(z_full, max(max(widths) * (1.0 + PAD_FRAC), 0.5))
-        zlim_full[pid] = z_full
 
     figure(prof, states, point_ids, zlim_cut, out_dir / "tf_profiles.png", args.title)
-    figure(prof, states, point_ids, zlim_full, out_dir / "tf_profiles_fullz.png", args.title)
 
 
 if __name__ == "__main__":
