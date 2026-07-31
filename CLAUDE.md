@@ -13,13 +13,18 @@ judged to reproduce the reference results in `data/` correctly. The goal now is 
 the physical meaning of how the parameters affect pre-wetting, to serve the paper. Target is
 a physics journal, so the model and the numerics do not go in the main text.
 
-The four analysis topics (one per control variable group) are in
-[doc/analysis/topiclist.md](doc/analysis/topiclist.md); each gets its own note under
-`doc/analysis/`. Still in the initial exploration stage — the observables are not yet
-pinned down. Observable framing: pre-wetting has two independent dimensions, strength
-(the jump in surface excess between thin and thick branch, not readable off a 2D phase
-map, set aside) and extent (how much of the `(phi_1_inf, phi_2_inf)` plane it occupies,
-measured by the length of the pre-wetting line and its distance to the binodal).
+An analysis topic is bound to one chi stage: a topic = one chi topology plus the question
+asked of it. There is no fixed topic list and no mapping from control-variable groups to
+topics; topics are opened one at a time as the physics warrants. Which topics exist, which
+are finished and which one is in progress is recorded only in
+[PROGRESS.md](PROGRESS.md) under `当前状态` — read it there and do not infer, enumerate or
+invent topics beyond what it states.
+
+Observable framing (established on the omega topic, not assumed to carry over): pre-wetting
+has two independent dimensions — strength (the jump in surface excess between thin and thick
+branch, not readable off a 2D phase map, set aside) and extent (how much of the
+`(phi_1_inf, phi_2_inf)` plane it occupies, measured by the length of the pre-wetting line
+and its distance to the binodal).
 
 Full model and solving condition: [doc/note/project_plan.md](doc/note/project_plan.md).
 
@@ -154,8 +159,9 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 - `scripts/` — 直接运行的脚本（run_case / plot_case / build_summary / run_verify.sh，
   外加各分析 topic 的脚本）。
 - `config/` — 单一 yaml 参数源。
-- `doc/analysis/` — 数据分析阶段的记录：`topiclist.md` 是 4 个 topic 的索引，
-  每个 topic 一个 note。图不进 doc/analysis/，留在 `out/`。
+- `doc/analysis/` — 早期分析笔记（`angle1_omega.md`、`measure_extent_debate.md`）。
+  `topiclist.md` 已作废（那份「4 个 topic 按控制变量分完」的划分不再成立），不要引用。
+  新的 topic 记录一律写在 `out/analysis/<topic 目录>/` 里，图与笔记放在一起。
 - `doc/note/` — `project_plan.md`（模型与求解条件的唯一出处）、intro note 与 `figures/`；
   `reference_method.md` 是复现参考方法的自查笔记。
 - `doc/paper/` — reference paper (Omar, Adame, Arana 2020).
@@ -183,8 +189,7 @@ a CPU box, free to use for heavy compute. Session-start routine on the server:
 
 - [PROGRESS.md](PROGRESS.md) — running progress log (current status, next steps, dated
   entries); update it as the analysis advances.
-- [doc/analysis/topiclist.md](doc/analysis/topiclist.md) — the 4 analysis topics, one per
-  control-variable group; index into the per-topic notes.
+  It is also the only place that says which analysis topics exist and where each one stands.
 - [doc/note/project_plan.md](doc/note/project_plan.md) — the model and solving condition
   (`f_b`, `W`, `f_surf`, `gamma`, the equilibrium equations and their boundary conditions,
   the first integral), goals, the three-layer control-variable structure, the 6 topologies,
