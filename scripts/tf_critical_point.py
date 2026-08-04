@@ -37,7 +37,7 @@ import argparse
 import csv
 import sys
 import time
-from dataclasses import replace
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -47,15 +47,33 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 import model
-from params import Physical
 
-CASE = dict(chi_12=-8.5, chi_13=0.0, chi_23=0.0, n1=1.0, n2=1.0, n3=1.0)
+
+@dataclass
+class Bulk:
+    """The fields of params.Physical that the bulk free energy actually uses.
+
+    Declared here rather than imported so this script does not pull in the yaml
+    config loader: nothing about a critical point depends on solver or scan
+    settings, and the values below are the T-f row of the case table.
+    """
+    chi_12: float = -8.5
+    chi_13: float = 0.0
+    chi_23: float = 0.0
+    n1: float = 1.0
+    n2: float = 1.0
+    n3: float = 1.0
 
 SEED_GRID = 40          # per axis, for the route-1 seed sweep
 ROOT_TOL = 1e-10        # max |residual| accepted for a route-1 root
 DEDUPE_TOL = 1e-6       # two roots closer than this are the same root
 FD_STEP = 1e-4          # finite-difference step for the self-check
 TIE_MIN_LEN = 1e-4      # continuation stops here; the midpoint is the estimate
+MAX_TIE_STEPS = 4000    # hard cap per branch, so a stalled step cannot spin
+STALL_FRAC = 0.999      # a step that shortens the tie line by less than this
+                        # much has stalled: the solver returns a length a hair
+                        # above the target, so a bare "length > target" test
+                        # never terminates.
 
 
 # ------------------------------------------------------------ bulk derivatives
@@ -99,8 +117,12 @@ def find_critical_points(p):
     span = np.linspace(0.02, 0.96, SEED_GRID)
     seeds = [(a, b) for a in span for b in span if a + b < 0.98]
 
+    print(f"  seeds: {len(seeds)}", flush=True)
     found = []
-    for seed in seeds:
+    for k, seed in enumerate(seeds):
+        if (k + 1) % 200 == 0 or (k + 1) == len(seeds):
+            print(f"  seed {k + 1}/{len(seeds)}, {len(found)} distinct root(s)",
+                  flush=True)
         sol = root(critical_residual, np.array(seed), args=(p,), method="hybr")
         if not sol.success:
             continue
@@ -191,13 +213,16 @@ def trace_branch(p, x_sym, direction):
     def record(x):
         length = float(np.hypot(x[0] - x[2], x[1] - x[3]))
         lines.append((float(x[0]), float(x[1]), float(x[2]), float(x[3]), length))
+        if len(lines) % 20 == 0:
+            print(f"    branch {direction:+.0f}: {len(lines)} tie lines, "
+                  f"length {length:.3e}", flush=True)
         return length
 
     record(x)
 
     # stage 1: step the midpoint offset t
     t, dt = 0.0, direction * 0.002
-    while abs(dt) > 1e-6:
+    while abs(dt) > 1e-6 and len(lines) < MAX_TIE_STEPS:
         t_new = t + dt
 
         def constraint(y, t_new=t_new):
@@ -215,7 +240,7 @@ def trace_branch(p, x_sym, direction):
 
     # stage 2: step the tie-line length down
     length = float(np.hypot(x[0] - x[2], x[1] - x[3]))
-    while length > TIE_MIN_LEN:
+    while length > TIE_MIN_LEN and len(lines) < MAX_TIE_STEPS:
         target = max(length * 0.7, TIE_MIN_LEN)
 
         def constraint(y, target=target):
@@ -227,7 +252,10 @@ def trace_branch(p, x_sym, direction):
         if not ok:
             break
         x = sol.x
-        length = record(x)
+        new_length = record(x)
+        if new_length > length * STALL_FRAC:
+            break
+        length = new_length
 
     tip = (0.5 * (x[0] + x[2]), 0.5 * (x[1] + x[3]), length)
     return lines, tip
@@ -258,6 +286,31 @@ def fd_checks(phi1, phi2, p, h=FD_STEP):
     return d_fd, hessian_det(phi1, phi2, p), c_fd, c_an
 
 
+AUDIT_POINTS = [(0.20, 0.30), (0.35, 0.25), (0.15, 0.15), (0.40, 0.40)]
+
+
+def fd_audit(p):
+    """Check the algebra where it can actually be checked.
+
+    At a critical point D and C are zero by construction, so comparing them
+    against finite differences there tests nothing -- both sides are noise. The
+    comparison is only meaningful at ordinary compositions, where both are large.
+    """
+    print("\n[check] analytic vs finite difference at ordinary compositions",
+          flush=True)
+    worst = 0.0
+    for phi1, phi2 in AUDIT_POINTS:
+        d_fd, d_an, c_fd, c_an = fd_checks(phi1, phi2, p)
+        rel_d = abs(d_fd - d_an) / max(abs(d_an), 1e-30)
+        rel_c = abs(c_fd - c_an) / max(abs(c_an), 1e-30)
+        worst = max(worst, rel_d, rel_c)
+        print(f"  ({phi1:.3f}, {phi2:.3f})  D fd={d_fd:+.6f} an={d_an:+.6f} "
+              f"rel={rel_d:.2e} | C fd={c_fd:+.4f} an={c_an:+.4f} "
+              f"rel={rel_c:.2e}", flush=True)
+    print(f"  worst relative difference {worst:.2e}", flush=True)
+    return worst
+
+
 # ------------------------------------------------------------------- driver
 
 def main():
@@ -267,10 +320,11 @@ def main():
     args = ap.parse_args()
 
     out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if not out_dir.is_dir():
+        raise SystemExit(f"directory does not exist: {out_dir}")
 
     t_start = time.time()
-    p = replace(Physical(), **CASE)
+    p = Bulk()
     print(f"case chi=({p.chi_12}, {p.chi_13}, {p.chi_23}) "
           f"n=({p.n1}, {p.n2}, {p.n3})", flush=True)
 
@@ -301,15 +355,16 @@ def main():
               flush=True)
 
     # checks
-    print("\n[check] analytic vs finite difference at each route-1 root",
-          flush=True)
+    fd_audit(p)
+
+    print("\n[check] residual of D and C at each route-1 root", flush=True)
     fd_rows = []
     for phi1, phi2 in roots:
         d_fd, d_an, c_fd, c_an = fd_checks(phi1, phi2, p)
         fd_rows.append((d_fd, d_an, c_fd, c_an))
-        print(f"  ({phi1:.6f}, {phi2:.6f})  D fd={d_fd:+.3e} an={d_an:+.3e} "
-              f"diff={abs(d_fd - d_an):.2e} | C fd={c_fd:+.6f} an={c_an:+.6f} "
-              f"diff={abs(c_fd - c_an):.2e}", flush=True)
+        print(f"  ({phi1:.6f}, {phi2:.6f})  D={d_an:+.3e}  C={c_an:+.3e} "
+              f"(finite difference there is pure noise: "
+              f"D={d_fd:+.1e}, C={c_fd:+.1e})", flush=True)
 
     print("\n[check] route 1 vs route 2", flush=True)
     pairing = []

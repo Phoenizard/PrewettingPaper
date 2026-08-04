@@ -14,7 +14,7 @@ Also prints the pre-wetting points ranked by distance to the nearer critical
 point, which is the input the profile step needs.
 
 Usage:
-  python scripts/plot_tf_critical.py [--data-root DIR] [--in-dir DIR]
+  python scripts/plot_tf_critical.py [--in-dir DIR] [--field-dir DIR]
       [--out-dir DIR] [--om1 0.28] [--om2 -0.375]
 """
 
@@ -26,9 +26,6 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
-CHI_DIR = "chi12_m8p5__chi13_0__chi23_0"
-CHIBB_DIR = "chibb11_0__chibb22_0__chibb12_0"
 
 BINODAL_COLOR = "0.55"      # archived binodal points
 LOOP_COLOR = "#1f77b4"      # recomputed loop
@@ -43,24 +40,20 @@ TIE_EVERY = 6
 N_RANKED = 10
 
 
-def encode(value):
-    return f"{value:g}".replace("-", "m").replace(".", "p")
-
-
 def read_rows(path):
     with open(path, newline="") as fh:
         return list(csv.DictReader(fh))
 
 
-def load_archive(root, om1, om2):
-    case = root / CHI_DIR / f"om1_{encode(om1)}__om2_{encode(om2)}" / CHIBB_DIR
+def load_archive(field_dir):
+    """The archived binodal points and pre-wetting line, copied from pw-space."""
     binodal = [(float(r["phi1"]), float(r["phi2"]))
-               for r in read_rows(case / "binodal.csv")]
+               for r in read_rows(field_dir / "binodal.csv")]
     # binodal.csv also carries a dense degenerate row at phi2 < 1e-6 spanning
     # the whole phi1 range; it is not part of the loop.
     loop = np.array([q for q in binodal if q[1] > AXIS_EPS])
     pw = np.array([(float(r["phi1_inf"]), float(r["phi2_inf"]))
-                   for r in read_rows(case / "pw_line.csv")])
+                   for r in read_rows(field_dir / "pw_line.csv")])
     return loop, pw
 
 
@@ -130,22 +123,25 @@ def annotate_crit(ax, crit):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data-root", default="/root/autodl-fs/pw-space/data")
     ap.add_argument("--in-dir", default="out/analysis/Tf_omega_cross/critical")
+    ap.add_argument("--field-dir", default="out/analysis/Tf_omega_cross/field")
     ap.add_argument("--out-dir")
     ap.add_argument("--om1", type=float, default=0.28)
     ap.add_argument("--om2", type=float, default=-0.375)
     args = ap.parse_args()
 
     in_dir = Path(args.in_dir)
+    field_dir = Path(args.field_dir)
     out_dir = Path(args.out_dir) if args.out_dir else in_dir
-    out_dir.mkdir(parents=True, exist_ok=True)
+    for d in (in_dir, field_dir, out_dir):
+        if not d.is_dir():
+            raise SystemExit(f"directory does not exist: {d}")
 
     crit = np.array([(float(r["phi1_c"]), float(r["phi2_c"]))
                      for r in read_rows(in_dir / "critical_points.csv")])
     branches = load_tie_lines(in_dir / "binodal_tie.csv")
     loop = closed_loop(branches)
-    archive_loop, pw = load_archive(Path(args.data_root), args.om1, args.om2)
+    archive_loop, pw = load_archive(field_dir)
 
     title = (rf"T-f: $\chi_{{12}} = -8.5$, $\chi_{{13}} = \chi_{{23}} = 0$, "
              rf"$\omega_1 = {args.om1:g}$, $\omega_2 = {args.om2:g}$")
@@ -188,7 +184,7 @@ def main():
     # zoom on the critical point the pre-wetting line runs toward
     near_pw = pw[order[:30]]
     box = np.vstack([near_pw, target[None, :]])
-    half = max(box[:, 0].ptp(), box[:, 1].ptp()) * (0.5 + PAD_FRAC) + 0.005
+    half = max(np.ptp(box[:, 0]), np.ptp(box[:, 1])) * (0.5 + PAD_FRAC) + 0.005
     cx, cy = 0.5 * (box[:, 0].min() + box[:, 0].max()), \
              0.5 * (box[:, 1].min() + box[:, 1].max())
     fig, ax = plt.subplots(figsize=(6.4, 6.4))
