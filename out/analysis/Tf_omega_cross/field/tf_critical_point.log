@@ -1,0 +1,51 @@
+case chi=(-8.5, 0.0, 0.0) n=(1.0, 1.0, 1.0)
+  seeds: 798
+  seed 200/798, 2 distinct root(s)
+  seed 400/798, 2 distinct root(s)
+  seed 600/798, 2 distinct root(s)
+  seed 798/798, 2 distinct root(s)
+
+[route 1] direct root find of D = 0, C = 0 (0.3s)
+  critical point (0.15866026, 0.37075151)
+  critical point (0.37075151, 0.15866026)
+
+[route 2] tie-line continuation (0.0s)
+  symmetric tie line (0.147475, 0.147475) -- (0.352525, 0.352525)
+    branch +1: 20 tie lines, length 2.849e-01
+    branch +1: 40 tie lines, length 2.680e-01
+    branch +1: 60 tie lines, length 2.376e-01
+    branch +1: 80 tie lines, length 1.888e-01
+    branch +1: 100 tie lines, length 1.001e-01
+    branch +1: 120 tie lines, length 1.000e-04
+  branch +1: 121 tie lines, tip (0.37065770, 0.15858949) at length 1.00e-04
+    branch -1: 20 tie lines, length 2.849e-01
+    branch -1: 40 tie lines, length 2.680e-01
+    branch -1: 60 tie lines, length 2.376e-01
+    branch -1: 80 tie lines, length 1.888e-01
+    branch -1: 100 tie lines, length 1.001e-01
+    branch -1: 120 tie lines, length 1.000e-04
+  branch -1: 121 tie lines, tip (0.15865963, 0.37075067) at length 1.00e-04
+
+[check] analytic vs finite difference at ordinary compositions
+  (0.200, 0.300)  D fd=-4.916664 an=-4.916667 rel=4.99e-07 | C fd=+0.9582 an=+0.9582 rel=4.22e-05
+  (0.350, 0.250)  D fd=-1.178569 an=-1.178571 rel=1.84e-06 | C fd=-9.4782 an=-9.4780 rel=2.69e-05
+  (0.150, 0.150)  D fd=+15.527785 an=+15.527778 rel=4.86e-07 | C fd=+25.9081 an=+25.9070 rel=4.05e-05
+  (0.400, 0.400)  D fd=+44.000010 an=+44.000000 rel=2.25e-07 | C fd=-53.5728 an=-53.5690 rel=7.19e-05
+  worst relative difference 7.19e-05
+
+[check] residual of D and C at each route-1 root
+  (0.158660, 0.370752)  D=+5.187e-13  C=-9.708e-13 (finite difference there is pure noise: D=+3.5e-06, C=+5.0e-05)
+  (0.370752, 0.158660)  D=+1.911e-11  C=+1.887e-11 (finite difference there is pure noise: D=+3.5e-06, C=+5.0e-05)
+
+[check] route 1 vs route 2
+  tip (0.37065770, 0.15858949) vs root (0.37075151, 0.15866026)  distance 1.18e-04
+  tip (0.15865963, 0.37075067) vs root (0.15866026, 0.37075151)  distance 1.04e-06
+
+[check] mirror symmetry of the route-1 root set
+  (0.15866026, 0.37075151) mirrors (0.37075151, 0.15866026)  residual 2.03e-13
+  (0.37075151, 0.15866026) mirrors (0.15866026, 0.37075151)  residual 2.03e-13
+
+wrote /Users/phoenizard/Workplace/PrewettingPaper/out/analysis/Tf_omega_cross/critical/critical_points.csv (2 points)
+wrote /Users/phoenizard/Workplace/PrewettingPaper/out/analysis/Tf_omega_cross/critical/binodal_tie.csv (242 tie lines)
+total elapsed 0.5s
+EXIT=0

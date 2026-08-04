@@ -12,9 +12,14 @@
   thick 初猜振幅参数歧义（两参考码 0.09/0.02 vs 0.3/0.3，我们全局 0.3/0.3，致 T-f 两
   case 0 点、T-b 线中段缺失；机制与证据见 2026-07-08 深夜日志）；T-e 外延段缺失归因
   交叉提取保守分支 + 舍弃 terminal 放宽，与振幅无关。
-- 分析 topic 已定为 4 个（doc/analysis/topiclist.md），按控制变量分完：墙面亲附力
-  omega1/omega2、墙面交叉耦合 chibb12、墙面自增强 chibb11/chibb22、体相拓扑 chi。
-  存在性与熄灭边界作为各 topic 自带的一部分讨论，不单列。
+- topic 的定义（2026-07-31 订正）：一个 topic 绑定一个 chi stage，即「某个 chi 拓扑 +
+  对它提的问题」。没有预先划定的 topic 清单，也不按控制变量分组切 topic；topic 一个一个开。
+  本节是 topic 状态的唯一出处，不在此列出的 topic 一律视为不存在、不要自行补全或推断。
+  已完成的 topic：(0, 2.8, 0) stage 下 omega1 的主导性与 re-enter 分析。
+  正在进行的 topic：(-8.5, 0, 0) stage 下 pre-wetting 为何存在。
+  其余 stage 尚无任何 topic 计划。
+  作废：doc/analysis/topiclist.md 里「4 个 topic 按控制变量分完」的划分（omega / chibb12 /
+  chibb11-22 / chi）不再成立，该文件不要引用。
 - 观测量框架（2026-07-10 定）：prewetting 要测两件独立的事——strength 即 thin/thick
   两分支的吸附量之差 Delta-Gamma（跳变幅度），二维相图读不出，全程搁置；extent 即
   prewetting 在 (phi1_inf, phi2_inf) 平面上的占地，由两个互补分量刻画：prewetting line
@@ -23,7 +28,7 @@
   长度 L = MST 弧长剪空隙（建欧氏最小生成树、剪 >gap_tol=0.015 的桥边、剩余边长求和，
   抗弯折/分段/密度、gap 作诊断），替代此前 PCA 单直线跨度（对弯线高估）；到 binodal
   距离头条 dist_mean（逐点最近距离取平均），dist_min/dist_max 作诊断。不分 branch、
-  合并整体量。定义通用，4 topic 共用。
+  合并整体量。该定义在 (0, 2.8, 0) stage 上确立，未假定推广到其他 stage。
 - T-f（chi12 = -8.5、chi13 = chi23 = 0）已定为论文候选卖点（2026-07-26）：闭环 binodal 上出现
   pre-wetting，且只在 omega 平面上沿 omega1 + omega2 近似常数的一条窄带内出现。该 stage 满足
   溶质交换对称性（n1 = n2、kappa11 = kappa22、chi13 = chi23），故控制量是 omega1 + omega2 而非
@@ -55,16 +60,17 @@
 
 ## 下一步
 
+当前工作只有两件（2026-07-31 订正，不多不少）：
+
+- 优化 (0, 2.8, 0) stage 的论文语言表达（该 topic 的分析已完成，剩下的是把它写成论文语言）。
+- 继续 (-8.5, 0, 0) stage 的分析。
+
 （2026-07-21 重制）分析范围收窄：只做一个 case 分类下的分析，现有代码功能足够支撑
-当前 case 下的探索。原两项撤销、不做：extent 度量推到其余 3 个 topic；逐 case
+当前 case 下的探索。原两项撤销、不做：extent 度量推到其余 topic；逐 case
 measure_map.png 用新度量重跑回写 pw-space/data。
 
-当前工作：
-- T-f 卖点的定性机制：为什么 pre-wetting 只出现在 omega1 + omega2 近似常数的窄带上。
-  按约定从自由能的项推导，不用数据交叉验证代替。
-- 设计论文大纲。
-- 在仓库内建 LaTeX 论文项目，用 git + Overleaf 追踪；与主仓库的隔离采用
-  嵌套仓库 + 外层 .gitignore 方案（见 2026-07-21 讨论）。
+暂缓（不在当前两件里，未排期）：论文大纲设计；manuscript/ LaTeX 项目
+（嵌套仓库 + 外层 .gitignore + Overleaf，见 2026-07-21 讨论）。
 
 已放弃的路径（存档）：重算 gamma / cs 判 branch——被"必须区分 branch"这个错误前提
 逼出来的，前提去掉即不需要。scripts/branch_by_gamma.py、src/geom.py 的
@@ -102,6 +108,25 @@ environment.yml 固化依赖、phi_inf 扫描扩到全区间。重来后按新�
 已确认：「stage」= chi 拓扑目录（3 个），「配置」=(om, chibb) 组合；画廊按 stage 分组、om/chibb 可筛选。
 
 ## 进度日志
+
+### 2026-07-31（topic 定义订正 + T-f gamma 分项分解）
+
+topic 定义订正（用户裁定）：topic 与 chi stage 绑定，一个 topic = 一个 chi 拓扑加对它提的
+问题；没有预设清单，不按控制变量分组切分。已完成一个（(0, 2.8, 0) 的 omega1 主导性与
+re-enter），在做一个（(-8.5, 0, 0) 的 pre-wetting 存在性），其余 stage 无计划。
+doc/analysis/topiclist.md 那份 4 topic 划分作废。CLAUDE.md 与 session-resume skill 同步改：
+topic 状态只由本文件的「当前状态」给出，任何人（含 Claude）不得自行枚举或推断 topic。
+
+(-8.5, 0, 0) 分析产出（7-27 至 7-31，分支 tf-profiles）：
+- scripts/tf_gamma_decompose.py 把 gamma 拆成四项——W_inf（把 chi12 抽掉后的远场偏离惩罚）、
+  溶质互吸项 chi12 (phi1 - phi1_inf)(phi2 - phi2_inf) 的积分、梯度项、墙面项，
+  产物 out/analysis/Tf_omega_cross/profiles/gamma_terms.csv。
+- A/B/C 三个 pre-wetting 点上，thin 与 thick 的差值表明主导平衡是 W_inf 与溶质互吸项
+  （量级 0.26~0.47、符号相反），梯度项与墙面项小一个量级，Delta gamma = 0 与 pre-wetting
+  定义自洽。写在 out/analysis/Tf_omega_cross/omega_existance_analysis.md（末段未完）。
+- out/analysis/Tf_omega_cross/binodal_exist.md：闭环 binodal 的定性说明草稿（chi12 强负推动
+  相分离，混合熵不允许 phi1、phi2、phi_s 差距过大，故存在区收成中间的环）。
+- 作图：omega 十字改为框在 binodal 环上、等纵横比、方窗；另出沿等溶质线的混合熵图。
 
 ### 2026-07-26（T-f 成为论文候选卖点：交换对称性 + omega1+omega2 窄带 + 双端 re-enter）
 
