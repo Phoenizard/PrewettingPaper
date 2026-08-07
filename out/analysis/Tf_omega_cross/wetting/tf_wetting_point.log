@@ -1,0 +1,11 @@
+T-f wetting transition point: chi = (-8.5, 0.0, 0.0), omega = (0.28, -0.375), chibb = 0
+tie lines from /Users/phoenizard/Workplace/PrewettingPaper/out/analysis/Tf_omega_cross/critical/binodal_tie.csv
+--- omega scan: 40 tie lines x 5 wall settings ---
+sigma on the sampled tie lines: 0.8s
+omega = (+0.280000, -0.375000): wet on 40/40 tie lines; branch 0: 0 zero(s); branch 1: 0 zero(s)  [2.1s]
+omega = (+0.140000, -0.187500): wet on 19/40 tie lines; branch 0: 1 zero(s) at tie length ['0.1307']; branch 1: 1 zero(s) at tie length ['0.2753']  [0.9s]
+omega = (+0.070000, -0.093750): wet on 12/40 tie lines; branch 0: 0 zero(s); branch 1: 1 zero(s) at tie length ['0.2138']  [0.8s]
+omega = (+0.035000, -0.046875): wet on 9/40 tie lines; branch 0: 1 zero(s) at tie length ['0.0133']; branch 1: 1 zero(s) at tie length ['0.1564']  [0.7s]
+omega = (+0.014000, -0.018750): wet on 7/40 tie lines; branch 0: 1 zero(s) at tie length ['0.0120']; branch 1: 0 zero(s)  [0.7s]
+wrote /Users/phoenizard/Workplace/PrewettingPaper/out/analysis/Tf_omega_cross/wetting/omega_scan.csv
+EXIT=0

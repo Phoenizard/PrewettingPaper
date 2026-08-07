@@ -1,0 +1,3 @@
+phi1_w,phi2_w,delta_left,delta_right,loop_index_left,loop_index_right,sigma_at_point,nearest_pw_phi1,nearest_pw_phi2,nearest_pw_dist,tangent_angle_deg,kind
+0.15866026,0.37075151,nan,nan,361,362,0.00000000,0.12237519,0.16496541,0.20896058,75.6585,critical
+0.37075151,0.15866026,nan,nan,124,125,0.00000000,0.30565817,0.12237519,0.07452348,28.1337,critical
