@@ -1,103 +1,116 @@
-"""Topic-1 (omega) figures: pw_length and dist_mean over the (omega1, omega2) grid.
-
-Reads the master measures table produced by extract_measures.py, filters to one
-chi topology with chi_bb == 0 (the omega topic), and draws two heatmaps on the
-(omega_1, omega_2) grid: the headline pre-wetting-line length pw_length and the
-headline distance-to-binodal dist_mean. Cases with no pre-wetting are drawn as
-empty (white) cells so the extinction region is visible.
-
-These are analysis figures, not per-case maps: they go under out/ (never
-doc/analysis/). All labels are English.
-
-Usage:
-  python scripts/plot_omega_maps.py --measures <measures.csv> \
-      --stage chi12_0__chi13_2p8__chi23_0 --out-dir <out/analysis/omega>
-"""
+"""Supplementary T-a extent heatmaps from the established measures table."""
 
 import argparse
 import csv
+import sys
 from pathlib import Path
 
 import matplotlib
-
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 import numpy as np
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
 
-def _load(measures_path, stage):
+from paperfig import configure, panel_label, save_pdf_png
+
+
+def load_rows(path, stage):
     rows = []
-    with open(measures_path, newline="") as fh:
-        for r in csv.DictReader(fh):
-            if r["stage"] != stage:
+    with open(path, newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row["stage"] != stage:
                 continue
-            # omega topic: surface cross/self terms all zero
-            if any(float(r[k]) != 0.0 for k in
+            if any(float(row[key]) != 0.0 for key in
                    ("chi_bb_11", "chi_bb_22", "chi_bb_12")):
                 continue
-            rows.append(r)
+            rows.append(row)
     return rows
 
 
-def _grid(rows, field):
-    """Build a (omega2 x omega1) grid of `field`; NaN where no pre-wetting."""
-    om1 = sorted({float(r["omega_1"]) for r in rows})
-    om2 = sorted({float(r["omega_2"]) for r in rows})
-    i1 = {v: i for i, v in enumerate(om1)}
-    i2 = {v: i for i, v in enumerate(om2)}
-    grid = np.full((len(om2), len(om1)), np.nan)
-    for r in rows:
-        val = r.get(field, "")
-        if val == "" or r["flag"] == "no_prewetting":
-            continue
-        grid[i2[float(r["omega_2"])], i1[float(r["omega_1"])]] = float(val)
-    return np.array(om1), np.array(om2), grid
+def make_grid(rows, field):
+    omega1 = np.array(sorted({float(row["omega_1"]) for row in rows}))
+    omega2 = np.array(sorted({float(row["omega_2"]) for row in rows}))
+    i1 = {value: index for index, value in enumerate(omega1)}
+    i2 = {value: index for index, value in enumerate(omega2)}
+    grid = np.full((len(omega2), len(omega1)), np.nan)
+    sampled = np.zeros_like(grid, dtype=bool)
+    no_prewetting = np.zeros_like(grid, dtype=bool)
+    for row in rows:
+        y = i2[float(row["omega_2"])]
+        x = i1[float(row["omega_1"])]
+        sampled[y, x] = True
+        if row["flag"] == "no_prewetting" or row.get(field, "") == "":
+            no_prewetting[y, x] = True
+        else:
+            grid[y, x] = float(row[field])
+    return omega1, omega2, grid, sampled, no_prewetting
 
 
-def _heatmap(ax, om1, om2, grid, title, cbar_label, cmap="viridis"):
-    ax.set_facecolor("white")
-    im = ax.pcolormesh(om1, om2, grid, shading="nearest", cmap=cmap)
+def heatmap(ax, omega1, omega2, grid, sampled, no_prewetting,
+            title, colorbar_label, cmap):
+    ax.set_facecolor("0.92")
+    image = ax.pcolormesh(omega1, omega2, np.ma.masked_invalid(grid),
+                         shading="nearest", cmap=cmap)
+    yy, xx = np.where(no_prewetting)
+    if len(xx):
+        ax.scatter(omega1[xx], omega2[yy], marker="s", s=92,
+                   facecolor="white", edgecolor="0.35", linewidth=0.5, zorder=3)
+        ax.scatter(omega1[xx], omega2[yy], marker="x", s=28,
+                   color="0.20", linewidth=1.1, zorder=4)
     ax.set_xlabel(r"$\omega_1$")
     ax.set_ylabel(r"$\omega_2$")
-    ax.set_title(title, fontsize=10)
+    ax.set_title(title)
     ax.set_aspect("equal")
-    cb = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label(cbar_label)
+    colorbar = plt.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+    colorbar.set_label(colorbar_label)
+    return bool((~sampled).any()), bool(no_prewetting.any())
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--measures", required=True)
-    ap.add_argument("--stage", default="chi12_0__chi13_2p8__chi23_0")
-    ap.add_argument("--out-dir", required=True)
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--measures", required=True)
+    parser.add_argument("--stage", default="chi12_0__chi13_2p8__chi23_0")
+    parser.add_argument("--out-dir", required=True)
+    args = parser.parse_args()
+    configure()
+    rows = load_rows(args.measures, args.stage)
+    if not rows:
+        raise SystemExit(f"no matching rows for stage {args.stage}")
 
-    rows = _load(args.measures, args.stage)
-    out_dir = Path(args.out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.25))
+    omega1, omega2, length, sampled_l, none_l = make_grid(rows, "pw_length")
+    has_unsampled, has_none = heatmap(
+        axes[0], omega1, omega2, length, sampled_l, none_l,
+        r"pre-wetting-line length $L$", r"$L$", "viridis")
+    omega1, omega2, distance, sampled_d, none_d = make_grid(rows, "dist_mean")
+    unsampled_d, none_d_present = heatmap(
+        axes[1], omega1, omega2, distance, sampled_d, none_d,
+        r"mean distance to binodal $\bar d$", r"$\bar d$", "viridis_r")
+    panel_label(axes[0], "(a)")
+    panel_label(axes[1], "(b)")
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
-    # Both panels are oriented so that the BRIGHT region is the same corner
-    # (weak-omega_1) in both: for L, bright = large (long line); for d-bar the
-    # colormap is reversed (viridis_r) so bright = small d-bar (line hugs the
-    # binodal). The reader looks at the bright end in both panels; there is no
-    # need to switch attention between dark and light across the two.
-    om1, om2, gl = _grid(rows, "pw_length")
-    _heatmap(axes[0], om1, om2, gl,
-             r"line length $L$ (bright = longer line)", r"$L$")
-    om1, om2, gd = _grid(rows, "dist_mean")
-    _heatmap(axes[1], om1, om2, gd,
-             r"distance to binodal $\bar d$ (bright = hugs binodal)",
-             r"$\bar d$", cmap="viridis_r")
-    fig.suptitle(f"omega topic ({args.stage}, chibb=0)", fontsize=11)
-    fig.tight_layout()
-    out = out_dir / "omega_length_dist.png"
-    fig.savefig(out, dpi=150)
+    handles = []
+    if has_none or none_d_present:
+        handles.append(Line2D([], [], marker="x", ls="", color="0.20",
+                              label="sampled; no pre-wetting"))
+    if has_unsampled or unsampled_d:
+        handles.append(Patch(facecolor="0.92", edgecolor="0.55",
+                             label="not sampled"))
+    if handles:
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles),
+                   frameon=False, bbox_to_anchor=(0.5, -0.01))
+        bottom = 0.22
+    else:
+        bottom = 0.16
+    fig.subplots_adjust(left=0.09, right=0.98, bottom=bottom, top=0.87, wspace=0.34)
+    paths = save_pdf_png(fig, Path(args.out_dir) / "omega_length_dist.png")
     plt.close(fig)
-
-    n_pw = sum(1 for r in rows if r["flag"] != "no_prewetting")
-    print(f"omega topic cases: {len(rows)}  with pre-wetting: {n_pw}")
-    print(f"wrote {out}")
+    print(f"T-a cases: {len(rows)}")
+    print("figure:", *paths)
 
 
 if __name__ == "__main__":

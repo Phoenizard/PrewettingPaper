@@ -97,8 +97,8 @@ def main_figure(branches, row1, row2, lim, output):
         ax.legend(loc="best", frameon=False, handletextpad=0.3,
                   borderaxespad=0.2, labelspacing=0.25)
     axes[0].set_ylabel(r"$\phi_{2,\infty}$")
-    axes[0].set_title(r"varying $\chi_{bb,11}$; $\chi_{bb,22}=0$")
-    axes[1].set_title(r"varying $\chi_{bb,22}$; $\chi_{bb,11}=0$")
+    axes[0].set_title(r"varying $\chi_{bb,11}$")
+    axes[1].set_title(r"varying $\chi_{bb,22}$")
     panel_label(axes[0], "(a)")
     panel_label(axes[1], "(b)")
     fig.subplots_adjust(left=0.10, right=0.99, bottom=0.15, top=0.88, wspace=0.12)

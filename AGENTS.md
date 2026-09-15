@@ -27,8 +27,9 @@
 
 ## 模型与数据约定
 
-- Python 环境名固定为 `numenv`，由仓库的 `environment.yml` 创建；运行形式为
-  `conda run -n numenv python <script>`。
+- Python 环境名固定为 `numenv`，由仓库的 `environment.yml` 创建，并放在
+  `/root/autodl-tmp/conda-envs/numenv`。运行时设置
+  `CONDA_ENVS_PATH=/root/autodl-tmp/conda-envs`，再执行 `conda run -n numenv python <script>`。
 - 保持 plain scripts + `src/` modules 的结构，不把项目改造成可安装 Python package。
 - `pw_line.csv` 的 `source` 仅表示扫描方向，不是物理 branch；作图和分析时合并处理。
 - T-a 的 extent 使用既定定义：MST 剪除大于 `gap_tol=0.015` 的桥边后求长度；到 binodal 的
@@ -51,4 +52,3 @@
 2. 整理 T-a 现有图并准备两项候选补算；每项仍须在运行前单独获得用户确认。
 3. 仅用现有数据重制 T-f 图。
 4. 润色 T-a/T-f 正文与图注，编译并按最终版面检查。
-
