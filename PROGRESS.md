@@ -18,7 +18,12 @@
   `codex/ta-tf-publication-polish`，基线提交 `e32beecec2bef29c20ad625152f6be1db22aeb04`。
 - 新的项目指令入口为 `AGENTS.md`；`CLAUDE.md` 已废弃。数值实验统一使用
   `runs/<experiment-id>/` 的 manifest、输入 SHA-256、完整日志、原始输出和摘要记录。
-- 当前状态：工作区与记录规范正在建立，尚未启动任何数值实验。
+- `EXP-TA-PANEL-01` 已完成：两个经确认的 T-a case 均以 400×400 扫描、24 个 line workers
+  成功结束，分别得到 229 与 206 个 pre-wetting 点。新结果沿档案主线重合，并移除了旧
+  150×150 数据中的稀疏离群点；只用于替换相应两条论文曲线，不改变结论。完整记录位于
+  `runs/EXP-TA-PANEL-01/`（该目录仅保存在 AutoDL-TMP，不进入 Git）。
+- 当前状态：服务器环境、记录规范、现有数据图重制与 `EXP-TA-PANEL-01` 均已完成。下一项候选
+  数值工作是 T-a 对角线 re-entry 采样，必须在启动前另行取得用户确认。
 
 ## 当前状态
 
