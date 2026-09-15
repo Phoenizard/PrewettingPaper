@@ -15,3 +15,6 @@
 记录原则：失败或中止的实验也保留；不得覆盖旧实验目录；未经新确认不得扩大扫描范围；正式论文图
 只从 manifest 指向的原始数据生成。
 
+实验完成后，将便于审阅的精简副本发布到 `experiments/results/<experiment-id>/` 并同步当前
+工作分支到 GitHub。精简副本保留 README、manifest、核心数值 CSV、对照图与必要的校验信息；
+体积较大的完整运行日志只留在 AutoDL-TMP 的 `runs/<experiment-id>/`。

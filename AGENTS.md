@@ -24,6 +24,9 @@
   数值精度、并行度、预计产物。一次确认只覆盖所列实验，不得自动扩展扫描范围。
 - 每次实验在 `runs/<experiment-id>/` 保存 `manifest.yaml`、输入文件 SHA-256 清单、完整日志、原始
   输出和结果摘要。SHA-256 仅用于确认所用数据版本，并不复制或加密数据。
+- 每次实验完成后，在 `experiments/results/<experiment-id>/` 建立适合 GitHub 浏览的精简归档，
+  至少包含 README、manifest、核心 CSV 和对照图；完整逐行日志继续留在 AutoDL-TMP 的 `runs/`。
+  完成归档与检查后，将当前工作分支推送到 GitHub，除非用户明确要求暂不推送。
 
 ## 模型与数据约定
 
