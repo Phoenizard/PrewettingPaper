@@ -14,6 +14,7 @@ out/*
 # Run logs (alongside out/) and throwaway/diagnostic scratch
 log/
 tmp/
+runs/
 
 # Python / OS cruft
 __pycache__/

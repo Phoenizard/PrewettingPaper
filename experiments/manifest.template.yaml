@@ -1,0 +1,44 @@
+experiment_id: null
+status: planned
+approved_by_user: false
+approved_at: null
+purpose: null
+paper_claim_supported: null
+new_claims_allowed: false
+
+repository:
+  commit: null
+  branch: codex/ta-tf-publication-polish
+environment:
+  conda_env: numenv
+  python_version: null
+  dependency_export: null
+
+inputs:
+  root: /root/autodl-fs/pw-space/data
+  cases: []
+  sha256_file: input_sha256.txt
+
+numerics:
+  domain_length: null
+  grid_points: null
+  tolerance: null
+  phi_min: null
+  phi_max: null
+  n_scan: null
+  n_lines: null
+  cs_threshold: null
+
+execution:
+  line_workers: null
+  blas_threads: 1
+  command: null
+  started_at: null
+  finished_at: null
+  exit_code: null
+
+outputs:
+  raw_directory: raw
+  figure_directory: figures
+  summary: summary.md
+
