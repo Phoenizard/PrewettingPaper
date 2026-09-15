@@ -39,14 +39,22 @@ def case_dir(root, om1, om2):
     return root / CHI_DIR / f"om1_{om1}__om2_{om2}" / CHIBB_DIR
 
 
-def load_series(root):
+def pw_file(root, replacement_root, om1, om2):
+    archive = case_dir(root, om1, om2) / "pw_line.csv"
+    if replacement_root is None:
+        return archive
+    replacement = case_dir(replacement_root, om1, om2) / "pw_line.csv"
+    return replacement if replacement.is_file() else archive
+
+
+def load_series(root, replacement_root=None):
     top = []
     bottom = []
     for encoded, value in zip(OM_VALUES, OM_FLOATS):
-        px, py = read_xy(case_dir(root, encoded, "m0p3") / "pw_line.csv",
+        px, py = read_xy(pw_file(root, replacement_root, encoded, "m0p3"),
                          "phi1_inf", "phi2_inf")
         top.append((value, px, py))
-        px, py = read_xy(case_dir(root, "m0p3", encoded) / "pw_line.csv",
+        px, py = read_xy(pw_file(root, replacement_root, "m0p3", encoded),
                          "phi1_inf", "phi2_inf")
         bottom.append((value, px, py))
     bx, by = read_xy(case_dir(root, "m0p3", "m0p3") / "binodal.csv",
@@ -124,10 +132,13 @@ def supplement_figure(bx, by, top, bottom, output):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-root", default="/root/autodl-fs/pw-space/data")
+    ap.add_argument("--replacement-root",
+                    help="optional case tree whose pw_line.csv files override the archive")
     ap.add_argument("--out", default="out/analysis/omega/pw_overlay_Ta.png")
     args = ap.parse_args()
     configure()
-    bx, by, top, bottom = load_series(Path(args.data_root))
+    replacement_root = Path(args.replacement_root) if args.replacement_root else None
+    bx, by, top, bottom = load_series(Path(args.data_root), replacement_root)
     output = Path(args.out)
     main_paths = main_figure(bx, by, top, bottom, output)
     supp = output.with_name(output.stem + "_supplement_2x4" + output.suffix)
