@@ -1,0 +1,62 @@
+experiment_id: EXP-TA-PANEL-01
+status: complete
+approved_by_user: true
+approved_at: 2026-09-15T21:40:40Z
+purpose: Recompute two T-a weak-side panels at publication resolution.
+paper_claim_supported: Existing T-a re-entry presentation only.
+new_claims_allowed: false
+
+repository:
+  execution_commit: cd14b0263f539532ec07a1213545732c0c0355df
+  analysis_commit: dc7b0bf
+  branch: codex/ta-tf-publication-polish
+environment:
+  conda_env: /root/autodl-tmp/conda-envs/numenv
+  python_version: 3.14.7
+  numpy_version: 2.5.3
+  scipy_version: 1.18.1
+  matplotlib_version: 3.11.1
+  pyyaml_version: 6.0.3
+  dependency_export: conda_explicit.txt
+
+inputs:
+  reference_root: /root/autodl-fs/pw-space/data
+  cases:
+    - chi12_0__chi13_2p8__chi23_0/om1_m0p18__om2_m0p3/chibb11_0__chibb22_0__chibb12_0
+    - chi12_0__chi13_2p8__chi23_0/om1_m0p3__om2_m0p18/chibb11_0__chibb22_0__chibb12_0
+  sha256_file: input_sha256.txt
+
+numerics:
+  config: config/paper_ta_400.yaml
+  domain_length: 10.0
+  grid_points: 1000
+  tolerance: 1.0e-8
+  max_iterations: 500
+  minimum_alpha: 1.0e-3
+  phi_min: 0.0001
+  phi_max: 0.2
+  n_scan: 400
+  n_lines: 400
+  cs_threshold: 0.1
+  minimum_hysteresis_points: 2
+  demixed_grid: 451
+  binodal_grid: 801
+
+execution:
+  scheduling: sequential_cases
+  line_workers: 24
+  blas_threads: 1
+  first_attempt_started_at: 2026-09-15T21:43:10Z
+  numerical_execution_started_at: 2026-09-15T21:45:42Z
+  finished_at: 2026-09-15T22:18:36Z
+  final_exit_code: 0
+  retained_failed_attempt: case_01.log
+  failed_attempt_reason: PyYAML was missing from environment.yml; no solver work started.
+
+outputs:
+  raw_directory: raw
+  figure_directory: figures
+  comparison_table: figures/comparison.csv
+  comparison_figure: figures/archive_vs_recompute.pdf
+  summary: summary.md
+  sha256_file: output_sha256.txt
