@@ -80,8 +80,8 @@ bceec0b6259884aa7fad01101ad16fee6e37db2bd439bc48f39d4a95853737ff  runs/EXP-TA-RE
 2d22a30c7ac40ce42735300a7ef05eabf0adcee5797b903147f3f8b9e552690a  runs/EXP-TA-REENTRY-01/figures/reentry_metrics.csv
 0eedb29a01e94eeeea4aafb545fd6f18e0bb724a71f42b4754fa0d3db5f03190  runs/EXP-TA-REENTRY-01/figures/ta_reentry.pdf
 39bbd00394e61ca1491c5882fb4218c6dd0126a53b742399ce42ef292ebb0e33  runs/EXP-TA-REENTRY-01/figures/ta_reentry.png
-2221ab93d6fc3bf5e639b9edd18f995ac157ca9de7d73bf1238df465e9c02f02  runs/EXP-TA-REENTRY-01/figures/ta_reentry_lines.pdf
-cb832f14a2b1f62094d65f1ad0295504e9aff708e77977428b072cb314316cd2  runs/EXP-TA-REENTRY-01/figures/ta_reentry_lines.png
+2541bdd40f4042afbcbd92041e425e8ec10ffedf3791b7cd7dd661d185c1aeb4  runs/EXP-TA-REENTRY-01/figures/ta_reentry_lines.pdf
+5a700a65de7aa359178de1caf87326a9c87bf2bad436b03fe0d738b90617e069  runs/EXP-TA-REENTRY-01/figures/ta_reentry_lines.png
 17475be29ae976e479bc3450c319f6fe4420d09460d787ede4801ebda66f8c1b  runs/EXP-TA-REENTRY-01/finished_at.txt
 cd27bdc3017d10e1e425ea97b2ee3f3f54b82362ac255d08764c8f6d25cdf0b8  runs/EXP-TA-REENTRY-01/input_sha256.txt
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  runs/EXP-TA-REENTRY-01/launcher.log
