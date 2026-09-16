@@ -15,7 +15,6 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.cm import viridis
 import numpy as np
-from scipy.interpolate import PchipInterpolator
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -28,7 +27,7 @@ OM_VALUES = ["m0p46", "m0p38", "m0p3", "m0p18"]
 OM_FLOATS = [-0.46, -0.38, -0.30, -0.18]
 COLORS = [viridis(t) for t in (0.08, 0.36, 0.64, 0.92)]
 MARKERS = ["o", "s", "^", "D"]
-BINODAL_COLOR = "0.55"
+BINODAL_COLOR = "0.08"
 
 
 def read_xy(path, xcol, ycol):
@@ -55,7 +54,9 @@ def smooth_monotone_y(px, py, n=500):
     yd = np.linspace(y[0], y[-1], n)
     if len(y) == 2:
         return np.interp(yd, y, x), yd
-    return PchipInterpolator(y, x)(yd), yd
+    degree = min(5, len(y) - 1)
+    fit = np.polynomial.Polynomial.fit(y, x, degree)
+    return fit(yd), yd
 
 
 def smooth_curve(px, py, n=240):
@@ -89,7 +90,7 @@ def pw_file(root, replacement_root, om1, om2):
     return replacement if replacement.is_file() else archive
 
 
-def load_series(root, replacement_root=None):
+def load_series(root, replacement_root=None, binodal_root=None):
     top = []
     bottom = []
     for encoded, value in zip(OM_VALUES, OM_FLOATS):
@@ -99,7 +100,8 @@ def load_series(root, replacement_root=None):
         px, py = read_xy(pw_file(root, replacement_root, "m0p3", encoded),
                          "phi1_inf", "phi2_inf")
         bottom.append((value, px, py))
-    bx, by = read_xy(case_dir(root, "m0p3", "m0p3") / "binodal.csv",
+    source = binodal_root if binodal_root is not None else root
+    bx, by = read_xy(case_dir(source, "m0p3", "m0p3") / "binodal.csv",
                      "phi1", "phi2")
     bx, by = physical_binodal_branch(bx, by)
     return bx, by, top, bottom
@@ -116,7 +118,7 @@ def common_limits(series):
 
 def draw_binodal(ax, bx, by):
     x, y = smooth_monotone_y(bx, by, n=500)
-    ax.plot(x, y, color=BINODAL_COLOR, lw=1.3,
+    ax.plot(x, y, color=BINODAL_COLOR, lw=2.1,
             label="binodal", zorder=1)
 
 
@@ -186,11 +188,15 @@ def main():
     ap.add_argument("--data-root", default="/root/autodl-fs/pw-space/data")
     ap.add_argument("--replacement-root",
                     help="optional case tree whose pw_line.csv files override the archive")
+    ap.add_argument("--binodal-root",
+                    help="optional case tree providing the plotted binodal")
     ap.add_argument("--out", default="out/analysis/omega/pw_overlay_Ta.png")
     args = ap.parse_args()
     configure()
     replacement_root = Path(args.replacement_root) if args.replacement_root else None
-    bx, by, top, bottom = load_series(Path(args.data_root), replacement_root)
+    binodal_root = Path(args.binodal_root) if args.binodal_root else None
+    bx, by, top, bottom = load_series(Path(args.data_root), replacement_root,
+                                      binodal_root)
     output = Path(args.out)
     main_paths = main_figure(bx, by, top, bottom, output)
     supp = output.with_name(output.stem + "_supplement_2x4" + output.suffix)

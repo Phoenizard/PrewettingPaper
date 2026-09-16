@@ -16,7 +16,7 @@ from scipy.interpolate import PchipInterpolator
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
-from paperfig import configure, panel_label, save_pdf_png
+from paperfig import configure, save_pdf_png
 
 CHI = "chi12_0__chi13_2p8__chi23_0"
 CHIBB = "chibb11_0__chibb22_0__chibb12_0"
@@ -55,6 +55,22 @@ def pchip_xy(points: np.ndarray, n: int = 240) -> tuple[np.ndarray, np.ndarray]:
     return PchipInterpolator(y, x)(yd), yd
 
 
+def smooth_binodal(points: np.ndarray, ylim: tuple[float, float], n: int = 500) -> tuple[np.ndarray, np.ndarray]:
+    """Return a smooth local fit to the solvent-rich bulk coexistence branch."""
+    margin = 0.006
+    local = points[(points[:, 1] >= ylim[0] - margin) &
+                   (points[:, 1] <= ylim[1] + margin)]
+    by_y: dict[float, list[float]] = {}
+    for x, y in local:
+        by_y.setdefault(float(y), []).append(float(x))
+    y = np.asarray(sorted(by_y))
+    x = np.asarray([np.mean(by_y[v]) for v in y])
+    degree = min(3, len(y) - 1)
+    fit = np.polynomial.Polynomial.fit(y, x, degree)
+    yd = np.linspace(max(ylim[0], y.min()), min(ylim[1], y.max()), n)
+    return fit(yd), yd
+
+
 def load_status(path: Path) -> dict[str, str]:
     with path.open(newline="") as fh:
         return {r["code"]: r["status"] for r in csv.DictReader(fh)}
@@ -65,47 +81,41 @@ def draw(data_root: Path, audit_csv: Path, out: Path, markers: bool) -> None:
     status = load_status(audit_csv)
     raw_binodal = read_xy(case_dir(data_root, "m0p3") / "binodal.csv", "phi1", "phi2")
     binodal = physical_binodal(raw_binodal)
-    bx, by = pchip_xy(binodal, 500)
+    xlim = (0.072, 0.108)
+    ylim = (-0.001, 0.041)
+    bx, by = smooth_binodal(binodal, ylim)
 
-    fig, axes = plt.subplots(1, 2, figsize=(7.2, 3.25))
-    xlims = ((0.072, 0.108), (0.090, 0.190))
-    ylims = ((-0.001, 0.041), (0.075, 0.203))
-    titles = ("strong wall attraction", "weak wall attraction")
-    for ax, xlim, ylim, title in zip(axes, xlims, ylims, titles):
-        visible = (by >= max(ylim[0], by.min())) & (by <= min(ylim[1], by.max()))
-        ax.fill_betweenx(by[visible], bx[visible], xlim[1], color="0.94", zorder=0)
-        ax.plot(bx[visible], by[visible], color="0.55", lw=1.5, label="binodal", zorder=2)
-        ax.set_xlim(*xlim); ax.set_ylim(*ylim); ax.set_title(title)
-        ax.set_xlabel(r"$\phi_{1,\infty}$"); ax.set_ylabel(r"$\phi_{2,\infty}$")
-        ax.grid(alpha=0.14, linewidth=0.5)
-    axes[0].text(0.69, 0.89, "two-phase", transform=axes[0].transAxes,
-                 color="0.45", fontsize=8)
-    axes[1].text(0.73, 0.88, "two-phase", transform=axes[1].transAxes,
-                 color="0.45", fontsize=8)
+    fig, ax = plt.subplots(figsize=(4.65, 3.45))
+    ax.fill_betweenx(by, bx, xlim[1], color="0.90", zorder=0)
+    ax.plot(bx, by, color="0.08", lw=2.2,
+            label="bulk coexistence boundary", zorder=5)
+    ax.set_xlim(*xlim); ax.set_ylim(*ylim)
+    ax.set_title("strengthening both wall attractions")
+    ax.set_xlabel(r"$\phi_{1,\infty}$"); ax.set_ylabel(r"$\phi_{2,\infty}$")
+    ax.grid(alpha=0.13, linewidth=0.5)
+    ax.text(0.56, 0.66, "uniform bulk", transform=ax.transAxes,
+            ha="center", color="0.20", fontsize=8)
+    ax.text(0.83, 0.84, "bulk phase\nseparation", transform=ax.transAxes,
+            ha="center", va="center", color="0.25", fontsize=8)
 
     valid_strong = [(c, v) for c, v in DISPLAY[:4] if status.get(c) == "valid"]
     colors = [viridis(v) for v in np.linspace(0.18, 0.82, max(len(valid_strong), 1))]
     for (code, value), color in zip(valid_strong, colors):
         points = read_xy(case_dir(data_root, code) / "pw_line.csv", "phi1_inf", "phi2_inf")
         x, y = pchip_xy(points)
-        axes[0].plot(x, y, color=color, lw=2.0,
-                     label=rf"$\omega_1=\omega_2={value:g}$", zorder=3)
+        ax.plot(x, y, color=color, lw=2.2,
+                label=rf"$\omega_1=\omega_2={value:g}$", zorder=3)
         if markers:
             count = min(9, len(points))
             idx = np.unique(np.linspace(0, len(points) - 1, count).round().astype(int))
             ordered = points[np.argsort(points[:, 1])]
-            axes[0].scatter(ordered[idx, 0], ordered[idx, 1], s=15, color=color,
-                            edgecolor="white", linewidth=0.25, zorder=4)
+            ax.scatter(ordered[idx, 0], ordered[idx, 1], s=17, color=color,
+                       edgecolor="white", linewidth=0.25, zorder=4)
 
-    axes[1].text(0.50, 0.42,
-                 "no pre-wetting in the\none-phase region",
-                 transform=axes[1].transAxes, ha="center", va="center", fontsize=9)
-    axes[0].legend(frameon=False, loc="upper left", handlelength=1.4,
-                   handletextpad=0.45, labelspacing=0.25, borderaxespad=0.25)
-    axes[1].legend(frameon=False, loc="upper left", handlelength=1.4,
-                   handletextpad=0.45, borderaxespad=0.25)
-    panel_label(axes[0], "(a)"); panel_label(axes[1], "(b)")
-    fig.subplots_adjust(left=0.09, right=0.99, bottom=0.16, top=0.87, wspace=0.28)
+    ax.legend(frameon=False, loc="upper left", handlelength=1.7,
+              handletextpad=0.45, labelspacing=0.28, borderaxespad=0.35,
+              fontsize=8)
+    fig.subplots_adjust(left=0.16, right=0.98, bottom=0.17, top=0.86)
     save_pdf_png(fig, out)
     plt.close(fig)
 

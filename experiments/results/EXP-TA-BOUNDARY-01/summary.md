@@ -27,3 +27,9 @@ line length as zero and leaves distance to the binodal undefined.
 Two continuous-curve candidates are supplied: one retains sparse numerical
 markers and one shows curves only. Both use shape-preserving interpolation,
 remain inside the sampled endpoints and show the bulk two-phase side explicitly.
+
+After manuscript visual review, the publication figure was simplified to one
+strong-attraction panel because the weak-attraction panel contained no valid
+curve.  The binodal is now shown as a smooth, high-contrast bulk coexistence
+boundary, with the uniform-bulk and bulk-phase-separation regions labelled
+directly.  This was a plotting-only revision and used no additional solves.
