@@ -1,0 +1,36 @@
+experiment_id: EXP-TA-BOUNDARY-01
+status: complete
+approved_by_user: true
+purpose: Lightweight geometric audit of the eight T-a re-entry curves displayed in the draft.
+scope:
+  boundary_value_solves: 0
+  new_parameter_points: 0
+  displayed_wall_affinities: [-0.50, -0.48, -0.46, -0.44, -0.10, -0.08, -0.06, -0.04]
+  existing_no_line_controls: [-0.02, -0.01, -0.001]
+inputs:
+  data_root: runs/EXP-TA-REENTRY-01/raw
+  binodal_source_case: -0.30
+  execution_commit: 70fcf9f3b166572dfcf475c3f18e52fa883a3c75
+method:
+  binodal_branch: leading smooth solvent-rich branch before convex-hull edge vertices
+  one_phase_direction: toward the dilute origin
+  boundary_tolerance: max(two local binodal spacings, 1.0e-4)
+  invalid_curve_rule: more than 5 percent clearly on the two-phase side, a contiguous rejected segment, or fewer than 5 points
+resources:
+  cpu_cores: 1
+  gpu: false
+  hard_timeout_seconds: 480
+timing:
+  started_at: 2026-09-16T18:36:58Z
+  finished_at: 2026-09-16T18:40:31Z
+  final_audit_runtime_seconds: approximately 9
+  total_elapsed_including_branch-extraction_correction_seconds: 213
+outputs:
+  point_table: point_classification.csv
+  curve_table: curve_classification.csv
+  publication_measures: publication_measures.csv
+  diagnostic: boundary_audit.pdf
+  curves_with_markers: figures/ta_boundary_curves_markers.pdf
+  curves_only: figures/ta_boundary_curves_only.pdf
+  heatmap: figures/omega_length_dist.pdf
+  exit_code: 0

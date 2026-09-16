@@ -43,7 +43,7 @@ def make_grid(rows, field):
         y = i2[float(row["omega_2"])]
         x = i1[float(row["omega_1"])]
         sampled[y, x] = True
-        if row["flag"] == "no_prewetting" or row.get(field, "") == "":
+        if row["flag"].startswith("no_prewetting") or row.get(field, "") == "":
             no_prewetting[y, x] = True
         else:
             grid[y, x] = float(row[field])

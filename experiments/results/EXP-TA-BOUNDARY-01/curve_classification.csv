@@ -1,0 +1,12 @@
+code,wall_affinity,side,n_points,n_one_phase,n_boundary,n_two_phase,two_phase_fraction,longest_two_phase_run,min_signed_distance,mean_signed_distance,max_signed_distance,status,reason
+m0p5,-0.5,strong,2,2,0,0,0.0,0,0.016782917561383053,0.017247483288812183,0.017712049016241314,invalid,fewer_than_five_points
+m0p48,-0.48,strong,10,10,0,0,0.0,0,0.015052927807828437,0.01607349294332721,0.016484426297182202,valid,one_phase_or_boundary_within_tolerance
+m0p46,-0.46,strong,16,16,0,0,0.0,0,0.013241929220252366,0.014611784525732715,0.015302011336402225,valid,one_phase_or_boundary_within_tolerance
+m0p44,-0.44,strong,35,35,0,0,0.0,0,0.01151867949642169,0.012860645690145304,0.015096950284379192,valid,one_phase_or_boundary_within_tolerance
+m0p1,-0.1,weak,188,15,126,47,0.25,47,-0.0023883536624346976,-0.00019687943920711142,0.002219527922227403,invalid,more_than_five_percent_on_two_phase_side
+m0p08,-0.08,weak,127,0,77,50,0.3937007874015748,49,-0.0019930818579110537,-0.0008979657673844548,0.0002930118884742601,invalid,more_than_five_percent_on_two_phase_side
+m0p06,-0.06,weak,78,0,26,52,0.6666666666666666,48,-0.002794600989833941,-0.0017726537847665004,-0.0009785866536610633,invalid,more_than_five_percent_on_two_phase_side
+m0p04,-0.04,weak,19,0,0,19,1.0,19,-0.003055515659520655,-0.0025741848538747038,-0.002369800504962342,invalid,more_than_five_percent_on_two_phase_side
+m0p02,-0.02,weak_control,0,0,0,0,0.0,0,nan,nan,nan,no_prewetting,no_crossings_in_existing_result
+m0p01,-0.01,weak_control,0,0,0,0,0.0,0,nan,nan,nan,no_prewetting,no_crossings_in_existing_result
+m0p001,-0.001,weak_control,0,0,0,0,0.0,0,nan,nan,nan,no_prewetting,no_crossings_in_existing_result
