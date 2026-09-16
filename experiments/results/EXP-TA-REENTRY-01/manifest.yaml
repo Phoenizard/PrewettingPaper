@@ -1,0 +1,100 @@
+experiment_id: EXP-TA-REENTRY-01
+status: complete
+approved_by_user: true
+approved_at: 2026-09-15T22:37:52Z
+purpose: Complete the diagonal T-a wall-affinity path needed to display both ends of the established re-entry scenario.
+paper_claim_supported: Existing T-a re-entry conclusion only.
+new_claims_allowed: false
+
+repository:
+  execution_commit: 083948c549bcb2617a4fa797936c1b5102471051
+  analysis_commit: 9019f2926840cd47a0b0eea25d17dd6a30f8762e
+  branch: codex/ta-tf-publication-polish
+environment:
+  conda_env: /root/autodl-tmp/conda-envs/numenv
+  blas_threads: 1
+  dependency_export: conda_explicit.txt
+
+inputs:
+  reference_root: /root/autodl-fs/pw-space/data
+  bulk_case: chi12_0__chi13_2p8__chi23_0
+  surface_case: chibb11_0__chibb22_0__chibb12_0
+  diagonal_wall_affinities:
+    - -0.50
+    - -0.49
+    - -0.48
+    - -0.47
+    - -0.46
+    - -0.45
+    - -0.44
+    - -0.30
+    - -0.10
+    - -0.08
+    - -0.06
+    - -0.04
+    - -0.02
+    - -0.01
+    - -0.001
+  archived_reference_present:
+    - -0.50
+    - -0.48
+    - -0.46
+    - -0.44
+    - -0.30
+    - -0.10
+  newly_sampled_points:
+    - -0.49
+    - -0.47
+    - -0.45
+    - -0.08
+    - -0.06
+    - -0.04
+    - -0.02
+    - -0.01
+    - -0.001
+  sha256_file: input_sha256.txt
+
+numerics:
+  config: config/paper_ta_400.yaml
+  domain_length: 10.0
+  grid_points: 1000
+  tolerance: 1.0e-8
+  max_iterations: 500
+  minimum_alpha: 1.0e-3
+  phi_min: 0.0001
+  phi_max: 0.2
+  n_scan: 400
+  n_lines: 400
+  cs_threshold: 0.1
+  minimum_hysteresis_points: 2
+  demixed_grid: 451
+  binodal_grid: 801
+
+execution:
+  scheduling: sequential_cases
+  line_workers: 24
+  blas_threads: 1
+  automatic_parameter_extension: false
+  launcher: run_reentry.sh
+  raw_directory: raw
+  log_pattern: case_NN.log
+  started_at: 2026-09-15T22:40:20Z
+  finished_at: 2026-09-16T09:35:26Z
+  elapsed_minutes: 655.1
+  final_exit_code: 0
+
+outputs:
+  required_measures:
+    - prewetting_exists
+    - arc_length
+    - dist_mean
+    - dist_min
+    - point_count
+    - segment_count
+    - endpoints
+  sha256_file: output_sha256.txt
+  measures_table: measures.csv
+  metrics_table: figures/reentry_metrics.csv
+  main_figure: figures/ta_reentry.pdf
+  diagnostic_overlay: figures/ta_reentry_lines.pdf
+  summary: summary.md
